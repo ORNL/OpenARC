@@ -1,0 +1,127 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+/* Helper function for converting strings to ints, with error checking */
+int StrToInt(const char *token, unsigned int *retVal)
+{
+  const char *c ;
+  char *endptr ;
+  const int decimal_base = 10 ;
+
+  if (token == NULL)
+    return 0 ; 
+
+  c = token ;
+  *retVal = (int)strtol(c, &endptr, decimal_base) ;
+  if((endptr != c) && ((*endptr == ' ') || (*endptr == '\0')))
+    return 1 ; 
+  else
+    return 0 ; 
+}
+
+void saxpy( float* restrict Z, float A, float* restrict X, float* restrict Y, unsigned int chunkSize, int asyncID ) {
+	unsigned int i;
+	#pragma acc kernels loop independent gang worker copyin(X[0:chunkSize], Y[0:chunkSize]) copyout(Z[0:chunkSize]) async(asyncID)
+	for (i = 0; i < chunkSize; i++) {
+		Z[i] = A * X[i] + Y[i];
+	}
+}
+
+
+int main(int argc, char** argv) {
+    unsigned int size = 4096;
+    float *X, *Y, *Z;
+	float A = 4;
+    unsigned int i;
+	unsigned int chunkSize = 0;
+	unsigned int lastChunkSize = 0;
+	unsigned int numTasks = 0;
+	int k;
+	unsigned int nDevices = 1;
+	int asyncID;
+    int error = 0;
+
+	if( argc > 1 ) {
+		i = 1;
+		while( i<argc ) {
+			int ok;
+			if(strcmp(argv[i], "-d") == 0) {
+				if (i+1 >= argc) {
+					printf("Missing integer argument to -d");
+				}
+				ok = StrToInt(argv[i+1], &(nDevices));
+				if(!ok) {
+					printf("Parse Error on option -d integer value required after argument\n");
+				}
+				i+=2;
+			} else if(strcmp(argv[i], "-s") == 0) {
+				if (i+1 >= argc) {
+					printf("Missing integer argument to -s");
+				}
+				ok = StrToInt(argv[i+1], &(size));
+				if(!ok) {
+					printf("Parse Error on option -s integer value required after argument\n");
+				}
+				i+=2;
+			} else if(strcmp(argv[i], "-c") == 0) {
+				if (i+1 >= argc) {
+					printf("Missing integer argument to -c");
+				}
+				ok = StrToInt(argv[i+1], &(chunkSize));
+				if(!ok) {
+					printf("Parse Error on option -c integer value required after argument\n");
+				}
+				i+=2;
+			} else {
+				printf("Invalid commandline option: %s\n", argv[i]);
+				exit(1);
+			}
+		}
+	}
+
+	if( chunkSize == 0 ) {
+		chunkSize = size/nDevices;
+	}
+	numTasks = size/chunkSize;
+	if( size%chunkSize != 0 ) {
+		lastChunkSize = chunkSize + (size - (numTasks)*chunkSize);
+	} else {
+		lastChunkSize = chunkSize;
+	}
+
+    X = (float*) malloc(size * sizeof(float));
+    Y = (float*) malloc(size * sizeof(float));
+    Z = (float*) malloc(size * sizeof(float));
+
+    for (i = 0; i < size; i++) {
+        X[i] = (float) i;
+        Y[i] = (float) i * 100;
+		Z[i] = 1.0;
+    }
+
+	{
+    	for( i = 0; i < numTasks; i++ ) {
+			asyncID = i % nDevices;
+			if( i==numTasks-1 ) {
+				saxpy( Z + i*chunkSize, A, X + i*chunkSize, Y + i*chunkSize, lastChunkSize, asyncID);
+			} else {
+				saxpy( Z + i*chunkSize, A, X + i*chunkSize, Y + i*chunkSize, chunkSize, asyncID);
+			}
+    	}
+		#pragma acc wait
+	}
+
+    for (i = 0; i < size; i++) {
+		float result = A * ((float) i) + ((float) i) * 100;
+        if (Z[i] != result) {
+			printf("Z[%u] = %f, ref = %f\n", i, Z[i], result);
+			error++;
+		}
+    }
+
+    printf("size:%u, chunkSize:%u, nDevices:%u error:%d\n", size, chunkSize, nDevices, error);
+
+    return 0;
+}
+

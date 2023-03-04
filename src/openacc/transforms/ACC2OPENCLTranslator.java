@@ -5280,8 +5280,8 @@ public class ACC2OPENCLTranslator extends ACC2GPUTranslator {
           tr2DevProcMap.put(parentTrUnt, devProcMap);
         }
         Stack<Procedure> devProcStack = new Stack<Procedure>();
-        devProcCloning(region, parentTrUnt, TrUntCnt, callerProcSymSet, devProcStack);
-
+		HashMap<Procedure, List<Procedure>> childParentMap = new HashMap<Procedure, List<Procedure>>();
+		devProcCloning(region, parentTrUnt, TrUntCnt, callerProcSymSet, devProcStack, childParentMap, cProc);
 
         ////////////////////////////////////////////////////////////////////
         //Old Location to set GPU kernel configuration parameters partII. //
@@ -5980,7 +5980,8 @@ public class ACC2OPENCLTranslator extends ACC2GPUTranslator {
       }
 
   private void devProcCloning(Traversable at, TranslationUnit trUnt, String TrCnt, 
-		  Set<Symbol> callerParamSymSet, Stack<Procedure> devProcStack) {
+		  Set<Symbol> callerParamSymSet, Stack<Procedure> devProcStack, 
+		  HashMap<Procedure, List<Procedure>> childParentMap, Procedure rootProcedure) {
 	  List<FunctionCall> funcList = IRTools.getFunctionCalls(at);
 	  if( funcList != null ) {
 		  Procedure parent_proc = IRTools.getParentProcedure(at);
@@ -6484,6 +6485,12 @@ public class ACC2OPENCLTranslator extends ACC2GPUTranslator {
 						  PrintTools.println("[INFO from devProcCloning()] a new device function added to the kernelsTranslationUnit: " + new_proc.getSymbolName(), 2);
 						  trUnt.addDeclaration(new_proc);
 						  devProcStack.push(new_proc);
+						  List<Procedure> parentList = childParentMap.get(new_proc);
+                          if( parentList == null ) {
+                              parentList = new LinkedList<Procedure>();
+                              childParentMap.put(new_proc, parentList);
+                          }    
+                          parentList.add(parent_proc);
 						  ////////////////////////////////////////////////////////////////////////
 						  //If the current procedure has annotations, copy them to the new one. //
 						  ////////////////////////////////////////////////////////////////////////
@@ -6583,7 +6590,7 @@ public class ACC2OPENCLTranslator extends ACC2GPUTranslator {
 					  ////////////////////////////////////////////////////////////////////////
 					  // Check functions called in the current device function recursively. //
 					  ////////////////////////////////////////////////////////////////////////
-					  devProcCloning(body, trUnt, TrCnt, newCallerParamSymSet, devProcStack);
+					  devProcCloning(body, trUnt, TrCnt, newCallerParamSymSet, devProcStack, childParentMap, rootProcedure);
 				  } else {
 					  //cloned device procedure already exist; just change function calls.
 					  Procedure new_proc = devProcContextMap.get(callContext);
@@ -6626,10 +6633,36 @@ public class ACC2OPENCLTranslator extends ACC2GPUTranslator {
 					  // Move the parent procedure before the new procedure in the stack, if not.
 					  int parent_index = devProcStack.indexOf(parent_proc);
 					  int child_index = devProcStack.indexOf(new_proc);
-					  if( parent_index > child_index ) {
-						  devProcStack.remove(parent_proc);
-						  devProcStack.add(child_index, parent_proc);
-					  }
+                      if( parent_index > child_index ) {
+                          devProcStack.remove(parent_proc);
+                          devProcStack.add(child_index, parent_proc);
+                          if( parent_proc != rootProcedure ) {
+                              List<Procedure> tChildListCurrent = new LinkedList<Procedure>();
+                              List<Procedure> tChildListNext = new LinkedList<Procedure>();
+                              tChildListCurrent.add(parent_proc);
+                              while( !tChildListCurrent.isEmpty() ) {
+                                  for( Procedure tChild : tChildListCurrent ) {
+                                      List<Procedure> tParentList = childParentMap.get(tChild);
+                                      for( Procedure tParent : tParentList ) {
+                                          if( tParent != rootProcedure ) {
+                                              parent_index = devProcStack.indexOf(tParent);
+                                              child_index = devProcStack.indexOf(tChild);
+                                              if( parent_index > child_index ) {
+                                                  devProcStack.remove(tParent);
+                                                  devProcStack.add(child_index, tParent);
+                                                  tChildListNext.add(tParent);
+                                              }
+                                          }
+                                      }
+                                  }
+                                  tChildListCurrent.clear();
+                                  if( !tChildListNext.isEmpty() ) {
+                                      tChildListCurrent.addAll(tChildListNext);
+                                      tChildListNext.clear();
+                                  }
+                              }
+                          }
+                      }
 				  }
 			  } else {
 				  boolean procDeclExist = false;

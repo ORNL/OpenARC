@@ -84,6 +84,10 @@ const char * cuda_error_code(CUresult err) {
 		case CUDA_ERROR_LAUNCH_FAILED: { str = "CUDA_ERROR_LAUNCH_FAILED"; break; }
 		case CUDA_ERROR_NOT_PERMITTED: { str = "CUDA_ERROR_NOT_PERMITTED"; break; }
 		case CUDA_ERROR_NOT_SUPPORTED: { str = "CUDA_ERROR_NOT_SUPPORTED"; break; }
+#if CUDA_VERSION >= 11010
+		case CUDA_ERROR_JIT_COMPILER_NOT_FOUND: { str = "CUDA_ERROR_JIT_COMPILER_NOT_FOUND"; break; }
+		case CUDA_ERROR_UNSUPPORTED_PTX_VERSION: { str = "CUDA_ERROR_UNSUPPORTED_PTX_VERSION"; break; }
+#endif
 		default: { str = "CUDA_ERROR_UNKNOWN"; break; }
 	}
 #endif

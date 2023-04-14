@@ -3109,6 +3109,31 @@ public class ACCParser {
 		return ExpressionParser.parse(sb.toString());
 	}
 
+	/**
+	 * Standalone expression parser, which takes a String and 
+	 * optional macro_map and returns Expression as output.
+	 * 
+	 * @param inputStr expression string 
+	 * @param macro_map optional macro map
+	 * @return Expression
+	 */
+	public static Expression parse_expression(String inputStr, HashMap<String, String>macro_map)
+	{
+		String newStr = ACCAnnotationParser.modifyAnnotationString("(" + inputStr +")");
+		token_array = newStr.split("\\s+");
+		token_index = 1; //Skip leading space before '(' token. 
+		if( macro_map == null ) {
+			macroMap = new HashMap<String, String>();
+		} else {
+			macroMap = macro_map;
+		}
+		match("(");
+		Expression exp = parse_expression("(", ")", 1);
+		match(")");
+
+		return exp;
+	}
+
 	private static void parse_acc_noargclause(String clause)
 	{
 		PrintTools.println("ACCParser is parsing ["+clause+"] clause", 3);

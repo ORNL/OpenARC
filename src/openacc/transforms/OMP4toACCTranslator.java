@@ -11,6 +11,7 @@ import openacc.analysis.ACCParser;
 import openacc.analysis.AnalysisTools;
 import openacc.analysis.ParserTools;
 import openacc.analysis.SubArray;
+import openacc.analysis.ACCParser.ExpressionParser;
 import openacc.hir.ACCAnnotation;
 import openacc.hir.ARCAnnotation;
 import openacc.hir.ASPENAnnotation;
@@ -1234,6 +1235,7 @@ public class OMP4toACCTranslator extends TransformPass {
         if(pragma.containsKey("num_teams")) {
             String numTeamsStr = pragma.get("num_teams");
             numTeamsExpr = ParserTools.strToExpression(numTeamsStr);
+            //numTeamsExpr = ACCParser.parse_expression(numTeamsStr, macroMap);
             pragma.remove("num_teams");
         }
 

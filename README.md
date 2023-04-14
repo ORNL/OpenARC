@@ -2,7 +2,7 @@
 
 ## RELEASE
 
-OpenARC V0.74 (March 03, 2023)
+OpenARC V0.75 (April 14, 2023)
 
 Open Accelerator Research Compiler (OpenARC) is a framework built on top of 
 the Cetus compiler infrastructure (http://cetus.ecn.purdue.edu), which is 
@@ -416,6 +416,10 @@ To JIT-compile the kernel file, be sure to delete any old kernel binary (openarc
     - Update CUDA runtime to allow intermixing of both OpenACC and CUDA. (See example in [openarc-path]/test/examples/openarc/matmul_openacc_cuda)
 
 - Bug fixes and improvements
+	- Fixed bugs in the OpenMP annotation parser.
+
+	- Fixed bugs in the ACC2OpenCLTranslator pass regarding handling acc update directives. 
+
 	- Fixed bugs in device function handling passes.
 
 	- Fixed bugs in the vector-to-worker clause tranformation pass.

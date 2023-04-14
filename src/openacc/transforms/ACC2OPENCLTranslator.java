@@ -2762,8 +2762,8 @@ public class ACC2OPENCLTranslator extends ACC2GPUTranslator {
               parentCStmt.addStatementBefore(AtStmt, new ExpressionStatement(tAExp));
               i++;
             }
-            copyoutCall.addArgument(new NameID("openarc_waits"));
           }
+          copyoutCall.addArgument(new NameID("openarc_waits"));
         } else if( asyncExp != null ) {
         	copyoutCall.addArgument(new IntegerLiteral(0));
         	copyoutCall.addArgument(new NameID("NULL"));

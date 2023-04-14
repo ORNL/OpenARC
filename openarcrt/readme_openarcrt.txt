@@ -1,7 +1,7 @@
 -------------------------------------------------------------------------------
 RELEASE
 -------------------------------------------------------------------------------
-OpenARC Runtime V0.73 (May 20, 2022)
+OpenARC Runtime V0.75 (April 14, 2023)
 
 OpenARC Runtime implements APIs used by the output program translated
 by OpenARC.

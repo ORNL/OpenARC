@@ -1707,7 +1707,8 @@ public class OmpParser {
             if (str == null) {
                 str = new String(get_token());
             } else {
-                str.concat((" " + get_token()));
+            	//[DEBUG by Seyong on April 14, 2023] update str with the returned String.
+                str = str.concat((" " + get_token()));
             }
         }
         match(")");

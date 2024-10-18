@@ -12,21 +12,21 @@
 
 #define ITER 	10
 
-#ifndef SIZE
-#define SIZE 	2048 //128 * 16
-//#define SIZE    4096 //256 * 16
-//#define SIZE    8192 //256 * 32
-//#define SIZE  12288 //256 * 48
+#ifndef ASIZE
+#define ASIZE 	2048 //128 * 16
+//#define ASIZE    4096 //256 * 16
+//#define ASIZE    8192 //256 * 32
+//#define ASIZE  12288 //256 * 48
 #ifdef _OPENARC_
-#pragma openarc #define SIZE 2048
+#pragma openarc #define ASIZE 2048
 #endif
 #endif
 
-#define SIZE_1 	(SIZE+1)
-#define SIZE_2 	(SIZE+2)
+#define ASIZE_1 	(ASIZE+1)
+#define ASIZE_2 	(ASIZE+2)
 
 #ifdef _OPENARC_
-#pragma openarc #define SIZE_2 (2+SIZE)
+#pragma openarc #define ASIZE_2 (2+ASIZE)
 #endif
 
 #define CHECK_RESULT
@@ -48,39 +48,39 @@ int main (int argc, char *argv[])
     int i, j, k;
     //int c;
     float sum = 0.0f;
-	float (*a)[SIZE_2];
-	float (*b)[SIZE_2];
+	float (*a)[ASIZE_2];
+	float (*b)[ASIZE_2];
 
     double strt_time, done_time;
 	double init_time;
 #if VERIFICATION == 1
-	float** a_CPU = (float**)malloc(sizeof(float*) * SIZE_2);
-	float** b_CPU = (float**)malloc(sizeof(float*) * SIZE_2);
+	float** a_CPU = (float**)malloc(sizeof(float*) * ASIZE_2);
+	float** b_CPU = (float**)malloc(sizeof(float*) * ASIZE_2);
 
-	float* a_data = (float*)malloc(sizeof(float) * SIZE_2 * SIZE_2);
-	float* b_data = (float*)malloc(sizeof(float) * SIZE_2 * SIZE_2);
+	float* a_data = (float*)malloc(sizeof(float) * ASIZE_2 * ASIZE_2);
+	float* b_data = (float*)malloc(sizeof(float) * ASIZE_2 * ASIZE_2);
 
-	for(i = 0; i < SIZE_2; i++)
+	for(i = 0; i < ASIZE_2; i++)
 	{
-		a_CPU[i] = &a_data[i * SIZE_2];
-		b_CPU[i] = &b_data[i * SIZE_2];
+		a_CPU[i] = &a_data[i * ASIZE_2];
+		b_CPU[i] = &b_data[i * ASIZE_2];
 	}
 #endif 
     strt_time = my_timer ();
 #ifdef _OPENARC_
-	a = (float (*)[SIZE_2])acc_create_unified(NULL, sizeof(float)*SIZE_2*SIZE_2);
-	b = (float (*)[SIZE_2])acc_create_unified(NULL, sizeof(float)*SIZE_2*SIZE_2);
+	a = (float (*)[ASIZE_2])acc_create_unified(NULL, sizeof(float)*ASIZE_2*ASIZE_2);
+	b = (float (*)[ASIZE_2])acc_create_unified(NULL, sizeof(float)*ASIZE_2*ASIZE_2);
 #else
-	a = (float (*)[SIZE_2])malloc(sizeof(float)*SIZE_2*SIZE_2);
-	b = (float (*)[SIZE_2])malloc(sizeof(float)*SIZE_2*SIZE_2);
+	a = (float (*)[ASIZE_2])malloc(sizeof(float)*ASIZE_2*ASIZE_2);
+	b = (float (*)[ASIZE_2])malloc(sizeof(float)*ASIZE_2*ASIZE_2);
 #endif
     init_time = my_timer () - strt_time;
 
     //while ((c = getopt (argc, argv, "")) != -1);
 
-    for (i = 0; i < SIZE_2; i++)
+    for (i = 0; i < ASIZE_2; i++)
     {
-        for (j = 0; j < SIZE_2; j++)
+        for (j = 0; j < ASIZE_2; j++)
         {
             b[i][j] = 0;
 #if VERIFICATION == 1
@@ -89,43 +89,43 @@ int main (int argc, char *argv[])
         }
     }
 
-    for (j = 0; j <= SIZE_1; j++)
+    for (j = 0; j <= ASIZE_1; j++)
     {
         b[j][0] = 1.0;
-        b[j][SIZE_1] = 1.0;
+        b[j][ASIZE_1] = 1.0;
 
 #if VERIFICATION == 1
 		b_CPU[j][0] = 1.0;
-		b_CPU[j][SIZE_1] = 1.0;
+		b_CPU[j][ASIZE_1] = 1.0;
 #endif 
 
     }
-    for (i = 1; i <= SIZE; i++)
+    for (i = 1; i <= ASIZE; i++)
     {
         b[0][i] = 1.0;
-        b[SIZE_1][i] = 1.0;
+        b[ASIZE_1][i] = 1.0;
 
 #if VERIFICATION == 1
 		b_CPU[0][i] = 1.0;
-		b_CPU[SIZE_1][i] = 1.0;
+		b_CPU[ASIZE_1][i] = 1.0;
 #endif 
     }
 
-    printf ("Performing %d iterations on a %d by %d array\n", ITER, SIZE, SIZE);
+    printf ("Performing %d iterations on a %d by %d array\n", ITER, ASIZE, ASIZE);
 
     /* -- Timing starts before the main loop -- */
     printf("-------------------------------------------------------------\n");
 
     strt_time = my_timer ();
 
-#pragma acc data copy(b[0:SIZE_2][0:SIZE_2]), create(a[0:SIZE_2][0:SIZE_2])
+#pragma acc data copy(b[0:ASIZE_2][0:ASIZE_2]), create(a[0:ASIZE_2][0:ASIZE_2])
     for (k = 0; k < ITER; k++)
     {
 #pragma acc kernels loop gang, worker
 #pragma openarc transform permute(j,i)
-        for (i = 1; i <= SIZE; i++)
+        for (i = 1; i <= ASIZE; i++)
         {
-            for (j = 1; j <= SIZE; j++)
+            for (j = 1; j <= ASIZE; j++)
             {
                 a[i][j] = (b[i - 1][j] + b[i + 1][j] + b[i][j - 1] + b[i][j + 1]) / 4.0f;
             }
@@ -133,9 +133,9 @@ int main (int argc, char *argv[])
 
 #pragma acc kernels loop gang worker
 #pragma openarc transform permute(j,i)
-        for (i = 1; i <= SIZE; i++)
+        for (i = 1; i <= ASIZE; i++)
         {
-            for (j = 1; j <= SIZE; j++)
+            for (j = 1; j <= ASIZE; j++)
             {
                 b[i][j] = a[i][j];
             }
@@ -143,7 +143,7 @@ int main (int argc, char *argv[])
     }
 
 #ifdef CHECK_RESULT
-	for (i = 1; i <= SIZE; i++)
+	for (i = 1; i <= ASIZE; i++)
 	{
 		sum += b[i][i];
 	}
@@ -159,17 +159,17 @@ int main (int argc, char *argv[])
 
     for (k = 0; k < ITER; k++)
     {
-        for (i = 1; i <= SIZE; i++)
+        for (i = 1; i <= ASIZE; i++)
         {
-            for (j = 1; j <= SIZE; j++)
+            for (j = 1; j <= ASIZE; j++)
             {
                 a_CPU[i][j] = (b_CPU[i - 1][j] + b_CPU[i + 1][j] + b_CPU[i][j - 1] + b_CPU[i][j + 1]) / 4.0f;
             }
         }
 
-        for (i = 1; i <= SIZE; i++)
+        for (i = 1; i <= ASIZE; i++)
         {
-            for (j = 1; j <= SIZE; j++)
+            for (j = 1; j <= ASIZE; j++)
             {
                 b_CPU[i][j] = a_CPU[i][j];
             }
@@ -181,7 +181,7 @@ int main (int argc, char *argv[])
 		double gpu_sum = 0.0f;
     	double rel_err = 0.0f;
 
-		for (i = 1; i <= SIZE; i++)
+		for (i = 1; i <= ASIZE; i++)
     	{
         	cpu_sum += b_CPU[i][i]*b_CPU[i][i];
 			gpu_sum += b[i][i]*b[i][i];

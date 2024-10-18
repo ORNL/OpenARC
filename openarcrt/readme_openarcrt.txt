@@ -1,7 +1,7 @@
 -------------------------------------------------------------------------------
 RELEASE
 -------------------------------------------------------------------------------
-OpenARC Runtime V0.75 (April 14, 2023)
+OpenARC Runtime V0.8 (September 22, 2024)
 
 OpenARC Runtime implements APIs used by the output program translated
 by OpenARC.
@@ -50,6 +50,10 @@ platform, by copying and modifying example configurations in the ./makefiles dir
 FEATURES/UPDATES
 -------------------------------------------------------------------------------
 * New features
+	- Add a new environment variable, `OPENARC_VICTIM_CACHE_MODE` to control the victim cache mode.
+
+    - Add a new environment variable, `OPENARCRT_IRIS_DMEM` to control the type of IRIS memory objects when targeting the IRIS device.
+
     - Add a new IRIS driver, which replaces the old Brisbane driver. You can download the new IRIS runtime from the GitHub (https://github.com/ornl/iris).
 
     - Add a new environment variable, `OPENARCRT_USE_BRISBANE` to enable the old, deprecated Brisbane driver (disabled by default).
@@ -90,6 +94,8 @@ FEATURES/UPDATES
 	- Update IRIS/Brisbane driver to merge commands belonging to the same OpenACC directive into a single IRIS/Brisbane task.
 
 * Bug fixes and improvements
+	- Fixed bugs in the device memory handler management to accept general handler types.
+
 	- Disabled texture mrmory support in the HIP driver.
 
 	- Update the HIP driver and related makefiles/make.header.HIP file, so that the deprecated hipCtx_t hipContext is used only when `OPENARCRT_HIP_PLATFORM` environment variable is set to `nvcc`.

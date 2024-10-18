@@ -691,12 +691,17 @@ void HostConf::HI_reset() {
 	}
 		tmap->clear();
 	} 
-	for( addresstable_t::iterator it = device->masterHandleTable.begin(); it != device->masterHandleTable.end(); it++) {
+	for( memhandletable_t::iterator it = device->masterHandleTable.begin(); it != device->masterHandleTable.end(); it++) {
 		(it->second)->clear();
 	} 
 	for( memPoolmap_t::iterator it = device->memPoolMap.begin(); it != device->memPoolMap.end(); it++) {
 		(it->second)->clear();
 	} 
+#if defined(OPENARC_ARCH) && OPENARC_ARCH == 6
+	for( memPoolmap_t::iterator it = device->tempMemPoolMap.begin(); it != device->tempMemPoolMap.end(); it++) {
+		(it->second)->clear();
+	} 
+#endif
 	//device->postponedFreeTable.clear();
 	for( asyncfreetablemap_t::iterator it = device->postponedFreeTableMap.begin(); it != device->postponedFreeTableMap.end(); it++) {
 		(it->second)->clear();
@@ -730,6 +735,7 @@ void HostConf::HI_reset() {
     printf("\n/************************************/\n");
     printf("/* Profile Output for host thread %d */\n", thread_id);
     printf("/************************************/\n");
+	printf("VICTIM_CACHE_MODE: %d\n", VICTIM_CACHE_MODE);
     printf("Number of Host-to-Device Memory Transfer Calls: %ld\n", H2DMemTrCnt);
     printf("Number of Device-to-Host Memory Transfer Calls: %ld\n", D2HMemTrCnt);
     printf("Number of Host-to-Host Memory Transfer Calls: %ld\n", H2HMemTrCnt);

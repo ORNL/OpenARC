@@ -339,7 +339,7 @@ HI_error_t CudaDriver::init(int threadID) {
     	eventMap[1+thread_id*MAX_NUM_QUEUES_PER_THREAD]= e1;
     	threadQueueEventMap[thread_id] = eventMap;
 		masterAddressTableMap[thread_id] = new addresstable_t();
-		masterHandleTable[thread_id] = new addressmap_t();
+		masterHandleTable[thread_id] = new memhandlemap_t();
 		postponedFreeTableMap[thread_id] = new asyncfreetable_t();
 		postponedTempFreeTableMap[thread_id] = new asynctempfreetable_t();
 		postponedTempFreeTableMap2[thread_id] = new asynctempfreetable2_t();
@@ -460,7 +460,7 @@ HI_error_t CudaDriver::createKernelArgMap(int threadID) {
     	eventMap[1+thread_id*MAX_NUM_QUEUES_PER_THREAD]= e1;
     	threadQueueEventMap[thread_id] = eventMap;
 		masterAddressTableMap[thread_id] = new addresstable_t();
-		masterHandleTable[thread_id] = new addressmap_t();
+		masterHandleTable[thread_id] = new memhandlemap_t();
 		postponedFreeTableMap[thread_id] = new asyncfreetable_t();
 		postponedTempFreeTableMap[thread_id] = new asynctempfreetable_t();
 		postponedTempFreeTableMap2[thread_id] = new asynctempfreetable2_t();

@@ -279,7 +279,7 @@ do
 	fi  
 
 	# Input-specific OpenARC options to translate the benchmark.
-	inputOpenARCOption="macro=SIZE=${inputClass}"
+	inputOpenARCOption="macro=ASIZE=${inputClass}"
 	k=0 
 	while [ $k -lt ${numExperiments} ]
 	do

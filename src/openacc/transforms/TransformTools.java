@@ -255,6 +255,11 @@ public abstract class TransformTools {
 					//O2G translation (by KernelCallingProcCloning() and devProcCloning()).
 					continue;
 				}
+				if( pName.contains("_with_offsets") ) {
+					//[DEBUG on Oct. 7, 2024] the offset version of a kernel function may be used by the 
+					//IRIS runtime, and thus do not delete the offset version.
+					continue;
+				}
 				if( !funcCallSet.contains(pName) ) {
 					boolean notUsed = true;
 					if( someExps != null ) {

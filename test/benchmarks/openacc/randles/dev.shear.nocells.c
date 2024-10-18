@@ -30,6 +30,10 @@
 #include <string.h>
 #include <sys/time.h>
 
+#ifndef _DTYPE
+    #define _DTYPE double
+#endif
+
 #if 0
 // parameters
 #define MC	19			// number of discrete velocities
@@ -52,6 +56,8 @@
 
 //[DEBUG on Aug. 20, 2021] Fake input for performance testing
 // parameters
+#if 0
+
 #define MC	19			// number of discrete velocities
 #define LX_MAX	512		// number of lattice points, x-direction
 #define LY_MAX	256		// number of lattice points, y-direction
@@ -62,6 +68,25 @@
 #ifdef _OPENARC_
 #pragma openarc #define MC	19			
 #pragma openarc #define LX_MAX	512		
+#pragma openarc #define LY_MAX	256		
+#pragma openarc #define LZ_MAX	256		
+#pragma openarc #define T (1.0 / 3.0)	
+#pragma openarc #define omega 1.0		
+#endif
+
+#endif
+
+//[DEBUG on March 6, 2024] Another fake input that fits 4 GB
+#define MC	19			// number of discrete velocities
+#define LX_MAX	128		// number of lattice points, x-direction
+#define LY_MAX	256		// number of lattice points, y-direction
+#define LZ_MAX	256		// number of lattice points, z-direction
+#define T (1.0 / 3.0)	// speed of sound squared in LB units
+#define omega 1.0		// relaxation time for LBM
+
+#ifdef _OPENARC_
+#pragma openarc #define MC	19			
+#pragma openarc #define LX_MAX	128		
 #pragma openarc #define LY_MAX	256		
 #pragma openarc #define LZ_MAX	256		
 #pragma openarc #define T (1.0 / 3.0)	
@@ -80,11 +105,11 @@
 
 #if 0
 #if REORDER == 1
-double	distr[LX_MAX][LY_MAX][LZ_MAX][MC];		// distribution function
-double	distr_adv[LX_MAX][LY_MAX][LZ_MAX][MC];	// distribution function, to advance
+_DTYPE	distr[LX_MAX][LY_MAX][LZ_MAX][MC];		// distribution function
+_DTYPE	distr_adv[LX_MAX][LY_MAX][LZ_MAX][MC];	// distribution function, to advance
 #else
-double	distr[MC][LX_MAX][LY_MAX][LZ_MAX];		// distribution function
-double	distr_adv[MC][LX_MAX][LY_MAX][LZ_MAX];	// distribution function, to advance
+_DTYPE	distr[MC][LX_MAX][LY_MAX][LZ_MAX];		// distribution function
+_DTYPE	distr_adv[MC][LX_MAX][LY_MAX][LZ_MAX];	// distribution function, to advance
 #endif
 #endif
 
@@ -106,20 +131,20 @@ int main(int argc, char **argv) {
 	// variable definitions	*/
 	//[DEBUG on Aug. 20, 2021] Change to dynamic allocation
 #if REORDER == 1
-	double	(*distr)[LY_MAX][LZ_MAX][MC] = (double (*)[LY_MAX][LZ_MAX][MC])malloc(sizeof(double)*LX_MAX*LY_MAX*LZ_MAX*MC);		// distribution function
-	double	(*distr_adv)[LY_MAX][LZ_MAX][MC] = (double (*)[LY_MAX][LZ_MAX][MC])malloc(sizeof(double)*LX_MAX*LY_MAX*LZ_MAX*MC);	// distribution function, to advance
+	_DTYPE	(*distr)[LY_MAX][LZ_MAX][MC] = (_DTYPE (*)[LY_MAX][LZ_MAX][MC])malloc(sizeof(_DTYPE)*LX_MAX*LY_MAX*LZ_MAX*MC);		// distribution function
+	_DTYPE	(*distr_adv)[LY_MAX][LZ_MAX][MC] = (_DTYPE (*)[LY_MAX][LZ_MAX][MC])malloc(sizeof(_DTYPE)*LX_MAX*LY_MAX*LZ_MAX*MC);	// distribution function, to advance
 #else
-	double	(*distr)[LX_MAX][LY_MAX][LZ_MAX] = (double (*)[LX_MAX][LY_MAX][LZ_MAX])malloc(sizeof(double)*MC*LX_MAX*LY_MAX*LZ_MAX);		// distribution function
-	double	(*distr_adv)[LX_MAX][LY_MAX][LZ_MAX] = (double (*)[LX_MAX][LY_MAX][LZ_MAX])malloc(sizeof(double)*MC*LX_MAX*LY_MAX*LZ_MAX);	// distribution function, to advance
+	_DTYPE	(*distr)[LX_MAX][LY_MAX][LZ_MAX] = (_DTYPE (*)[LX_MAX][LY_MAX][LZ_MAX])malloc(sizeof(_DTYPE)*MC*LX_MAX*LY_MAX*LZ_MAX);		// distribution function
+	_DTYPE	(*distr_adv)[LX_MAX][LY_MAX][LZ_MAX] = (_DTYPE (*)[LX_MAX][LY_MAX][LZ_MAX])malloc(sizeof(_DTYPE)*MC*LX_MAX*LY_MAX*LZ_MAX);	// distribution function, to advance
 #endif
  	int		ic[MC][3], idg[MC];
-	double   distr_eq[MC];
+	_DTYPE   distr_eq[MC];
 
 	int 	lx, ly, lz;
-	double   rho, ux, uy, uz, distr0, distr1, uke;
-	double	px, py, pz, delNi;
-	double 	u0 = 1e-4;
-	double 	cdotuM;
+	_DTYPE   rho, ux, uy, uz, distr0, distr1, uke;
+	_DTYPE	px, py, pz, delNi;
+	_DTYPE 	u0 = 1e-4;
+	_DTYPE 	cdotuM;
 	
 	FILE    *vtk_fp, *fp, *g_fp;	
 	int 	i, ix, iy, iz, is, ik, istate, j, i1, js;
@@ -151,8 +176,8 @@ int main(int argc, char **argv) {
 	lx = LX_MAX;
 	ly = LY_MAX;	
 	lz = LZ_MAX;
-	double dx = 10.0/( (double) (lx-1));
-	double dt = dx;		// fix
+	_DTYPE dx = 10.0/( (_DTYPE) (lx-1));
+	_DTYPE dt = dx;		// fix
 	
 	// setup initial flow (shear flow)
 	distr1 = 1.0 / 36.0;
@@ -189,12 +214,12 @@ int main(int argc, char **argv) {
 	printf("starting loop...\n");
 	strt_time = my_timer();
 	//hoisted from the loop body.
-	double n[3];
-	double umax[3];
-	double cdotn[19];
-	double cdotu[19];
-	double tdotu[19];
-	double t[19][3];
+	_DTYPE n[3];
+	_DTYPE umax[3];
+	_DTYPE cdotn[19];
+	_DTYPE cdotu[19];
+	_DTYPE tdotu[19];
+	_DTYPE t[19][3];
 	int exitVel[5];
 	int tangVel[9];
 	/* THE TIMESTEPPING LOOP */	
@@ -318,7 +343,7 @@ int main(int argc, char **argv) {
 			#pragma acc loop worker
 		    for(iz = 0; iz < lz; iz++) {
 		    
-		    	double tempRho = 0.0;
+		    	_DTYPE tempRho = 0.0;
 				unsigned in;
 				for (in=0; in<9; ++in)
 				{	
@@ -340,16 +365,16 @@ int main(int argc, char **argv) {
 #endif
 				}
 				
-				double rho = tempRho/(1+n[0]*umax[0]+n[1]*umax[1]+n[2]*umax[2]);
+				_DTYPE rho = tempRho/(1+n[0]*umax[0]+n[1]*umax[1]+n[2]*umax[2]);
 		
 				// compute sum in equation 27 of Hecht, Harting (JSM, 2010)
-				double temp_sum[MC];
+				_DTYPE temp_sum[MC];
 				for(is = 0; is < MC; is++)
 				{
 					temp_sum[is] = 0.0;
 					for(js = 0; js < MC; js++)
 					{
-						double cdottij = (ic[js][0]*t[is][0] + ic[js][1]*t[is][1] + ic[js][2]*t[is][2]);
+						_DTYPE cdottij = (ic[js][0]*t[is][0] + ic[js][1]*t[is][1] + ic[js][2]*t[is][2]);
 #if REORDER == 1
 						temp_sum[is] += distr[ix][iy][iz][js]*cdottij*(1.-fabs(cdotn[js]));
 #else
@@ -365,10 +390,10 @@ int main(int argc, char **argv) {
 				int opp = is-1;
 #if REORDER == 1
 				distr[ix][iy][iz][opp]  = distr[ix][iy][iz][is] 
-					- cdotu[is]*rho*(double)idg[is]/6. - tdotu[is]*rho/3. + 0.5*temp_sum[is];
+					- cdotu[is]*rho*(_DTYPE)idg[is]/6. - tdotu[is]*rho/3. + 0.5*temp_sum[is];
 #else
 				distr[opp][ix][iy][iz]  = distr[is][ix][iy][iz] 
-					- cdotu[is]*rho*(double)idg[is]/6. - tdotu[is]*rho/3. + 0.5*temp_sum[is];
+					- cdotu[is]*rho*(_DTYPE)idg[is]/6. - tdotu[is]*rho/3. + 0.5*temp_sum[is];
 #endif
 				}
 		 	}
@@ -407,7 +432,7 @@ int main(int argc, char **argv) {
 			#pragma acc loop worker
 		    for(iz = 0; iz < lz; iz++) {
 		    
-		    	double tempRho = 0.0;
+		    	_DTYPE tempRho = 0.0;
 				unsigned in;
 				for (in=0; in<9; ++in)
 				{	
@@ -429,16 +454,16 @@ int main(int argc, char **argv) {
 #endif
 				}
 				
-				double rho = tempRho/(1+n[0]*umax[0]+n[1]*umax[1]+n[2]*umax[2]);
+				_DTYPE rho = tempRho/(1+n[0]*umax[0]+n[1]*umax[1]+n[2]*umax[2]);
 		
 				// compute sum in equation 27 of Hecht, Harting (JSM, 2010)
-				double temp_sum[MC];
+				_DTYPE temp_sum[MC];
 				for(is = 0; is < MC; is++)
 				{
 					temp_sum[is] = 0.0;
 					for(js = 0; js < MC; js++)
 					{
-						double cdottij = (ic[js][0]*t[is][0] + ic[js][1]*t[is][1] + ic[js][2]*t[is][2]);
+						_DTYPE cdottij = (ic[js][0]*t[is][0] + ic[js][1]*t[is][1] + ic[js][2]*t[is][2]);
 #if REORDER == 1
 						temp_sum[is] += distr[ix][iy][iz][js]*cdottij*(1.-fabs(cdotn[js]));
 #else
@@ -454,10 +479,10 @@ int main(int argc, char **argv) {
 				int opp = is+1;
 #if REORDER == 1
 				distr[ix][iy][iz][opp]  = distr[ix][iy][iz][is] 
-					- cdotu[is]*rho*(double)idg[is]/6. - tdotu[is]*rho/3. + 0.5*temp_sum[is];
+					- cdotu[is]*rho*(_DTYPE)idg[is]/6. - tdotu[is]*rho/3. + 0.5*temp_sum[is];
 #else
 				distr[opp][ix][iy][iz]  = distr[is][ix][iy][iz] 
-					- cdotu[is]*rho*(double)idg[is]/6. - tdotu[is]*rho/3. + 0.5*temp_sum[is];
+					- cdotu[is]*rho*(_DTYPE)idg[is]/6. - tdotu[is]*rho/3. + 0.5*temp_sum[is];
 #endif
 				}
 		 	}

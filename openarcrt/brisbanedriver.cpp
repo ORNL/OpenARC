@@ -189,17 +189,17 @@ int bind_tex_handler(void* p, void* device) {
   off += name_len;
   int type = *((int*) (params + off));
   off += sizeof(type);
-  void* dptr = *((void**) (params + off));
-  off += sizeof(dptr);
+  brisbane_mem mHandle = *((brisbane_mem*) (params + off));
+  off += sizeof(mHandle);
   size_t size = *((size_t*) (params + off));
-  //printf("[%s:%d] namelen[%lu] name[%s] type[%d] dptr[%p] size[%lu]\n", __FILE__, __LINE__, name_len, name, type, dptr, size);
+  //printf("[%s:%d] namelen[%lu] name[%s] type[%d] mHandle[%p] size[%lu]\n", __FILE__, __LINE__, name_len, name, type, mHandle, size);
 
   CUtexref tex;
   CUresult err;
-  brisbane_mem m = (brisbane_mem) dptr;
+  brisbane_mem m = (brisbane_mem) mHandle;
   brisbane::rt::DeviceCUDA* dev = (brisbane::rt::DeviceCUDA*) device;
   brisbane::rt::LoaderCUDA* ld = dev->ld();
-  brisbane::rt::Mem* mem = m->class_obj;
+  brisbane::rt::Mem* mem = (brisbane::rt::Mem*)m->class_obj;
   err = ld->cuModuleGetTexRef(&tex, *(dev->module()), name);
   if (err != CUDA_SUCCESS) printf("[%s:%d] err[%d]\n", __FILE__, __LINE__, err);
   err = ld->cuTexRefSetAddress(0, tex, (CUdeviceptr) mem->arch(dev), size);
@@ -303,14 +303,14 @@ HI_error_t BrisbaneDriver::init(int threadID) {
 */
 
   masterAddressTableMap[thread_id] = new addresstable_t();
-  masterHandleTable[thread_id] = new addressmap_t();
+  masterHandleTable[thread_id] = new memhandlemap_t();
   postponedFreeTableMap[thread_id] = new asyncfreetable_t();
   postponedTempFreeTableMap[thread_id] = new asynctempfreetable_t();
   postponedTempFreeTableMap2[thread_id] = new asynctempfreetable2_t();
   memPoolMap[thread_id] = new memPool_t();
   tempMallocSizeMap[thread_id] = new sizemap_t();
   threadAsyncMap[thread_id] = NO_QUEUE;
-  threadTaskMap[thread_id] = NULL;
+  //threadTaskMap[thread_id] = NULL;
   threadAsyncTaskMap[thread_id] = new threadtaskmapbrisbane_t();
   threadTaskMapNesting[thread_id] = 0;
   threadHostMemFreeMap[thread_id] = new pointerset_t();
@@ -384,6 +384,7 @@ HI_error_t BrisbaneDriver::HI_register_kernel_numargs(std::string kernel_name, i
       kernelParams->kernelParams = (void**)malloc(sizeof(void*) * num_args);
       kernelParams->kernelParamsOffset = (size_t*)malloc(sizeof(size_t) * num_args);
       kernelParams->kernelParamsInfo = (int*)malloc(sizeof(int) * num_args);
+      kernelParams->kernelParamMems = (brisbane_mem*)malloc(sizeof(brisbane_mem) * num_args);
     } else {
       fprintf(stderr, "[ERROR in BrisbaneDriver::HI_register_kernel_numargs(%s, %d)] num_args should be greater than zero.\n",kernel_name.c_str(), num_args);
       exit(1);
@@ -413,11 +414,13 @@ HI_error_t BrisbaneDriver::HI_register_kernel_arg(std::string kernel_name, int a
     *(kernelParams->kernelParams + arg_index) = arg_value;
     *(kernelParams->kernelParamsOffset + arg_index) = 0;
     *(kernelParams->kernelParamsInfo + arg_index) = (int)arg_size;
+    brisbane_mem iMem;
+    *(kernelParams->kernelParamMems + arg_index) = iMem;
     //err = brisbane_kernel_setarg((brisbane_kernel)(tconf->kernelsMap.at(this).at(kernel_name)), arg_index, arg_size, arg_value);
   } else {
     HI_device_mem_handle_t tHandle;
     if( HI_get_device_mem_handle(*((void **)arg_value), &tHandle, tconf->threadID) == HI_success ) {
-      *(kernelParams->kernelParams + arg_index) = tHandle.basePtr;
+      *(kernelParams->kernelParams + arg_index) = NULL;
       //*(kernelParams->kernelParamsOffset + arg_index) = 0 - tHandle.offset;
       //*(kernelParams->kernelParamsOffset + arg_index) = tHandle.offset/unitSize;
       *(kernelParams->kernelParamsOffset + arg_index) = tHandle.offset;
@@ -430,8 +433,8 @@ HI_error_t BrisbaneDriver::HI_register_kernel_arg(std::string kernel_name, int a
       } else { //unknown or temporary
       	*(kernelParams->kernelParamsInfo + arg_index) = 0;
       }
-      
-      //err = brisbane_kernel_setmem_off((brisbane_kernel)(tconf->kernelsMap.at(this).at(kernel_name)), arg_index, *((brisbane_mem*) &(tHandle.basePtr)), tHandle.offset, brisbane_rw);
+      *(kernelParams->kernelParamMems + arg_index) = tHandle.memHandle;
+      //err = brisbane_kernel_setmem_off((brisbane_kernel)(tconf->kernelsMap.at(this).at(kernel_name)), arg_index, *((brisbane_mem*) &(tHandle.memHandle)), tHandle.offset, brisbane_rw);
       //if (err != BRISBANE_OK) fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err);
     } else {
 		fprintf(stderr, "[ERROR in BrisbaneDriver::HI_register_kernel_arg()] Cannot find a device pointer to memory handle mapping; failed to add argument %d to kernel %s (Brisbane Device)\n", arg_index, kernel_name.c_str());
@@ -462,13 +465,24 @@ HI_error_t BrisbaneDriver::HI_kernel_call(std::string kernel_name, size_t gridSi
 #endif
   int err;
   int currentAsync = threadAsyncMap[threadID];
-  brisbane_task task = threadTaskMap[threadID];
+  bool task_exist = false;
+  brisbane_task task;
+  if( threadTaskMap.count(threadID) > 0 ) {
+    task = threadTaskMap[threadID];
+    task_exist = true;
+  }
   int nestingLevel = threadTaskMapNesting[threadID];
-  if( (task == NULL) && (nestingLevel == 0) ) {
+  if( !task_exist && (nestingLevel == 0) ) {
     brisbane_task_create(&task);
   }
   size_t gws[3] = { gridSize[0] * blockSize[0], gridSize[1] * blockSize[1], gridSize[2] * blockSize[2] };
   kernelParams_t *kernelParams = tconf->kernelArgsMap.at(this).at(kernel_name);
+  int num_args = kernelParams->num_args;
+  for(int i=0; i<num_args; i++) {
+    if( kernelParams->kernelParams[i] == NULL ) {
+        kernelParams->kernelParams[i] = kernelParams->kernelParamMems[i];
+    }
+  }
   //brisbane_task_kernel(task, kernel_name.c_str(), 3, NULL, gws, blockSize, kernelParams->num_args, kernelParams->kernelParams, kernelParams->kernelParamsInfo);
   brisbane_task_kernel_v2(task, kernel_name.c_str(), 3, NULL, gws, blockSize, kernelParams->num_args, kernelParams->kernelParams, kernelParams->kernelParamsOffset, kernelParams->kernelParamsInfo);
 
@@ -645,7 +659,7 @@ HI_error_t BrisbaneDriver::HI_malloc1D(const void *hostPtr, void **devPtr, size_
 #endif
   HostConf_t * tconf = getHostConf(threadID);
   int err;
-  void * memHandle;
+  brisbane_mem memHandle;
   if(HI_get_device_address(hostPtr, devPtr, NULL, NULL, asyncID, tconf->threadID) == HI_success ) {
 	if( unifiedMemSupported ) {
 		err = HI_success;
@@ -672,7 +686,7 @@ HI_error_t BrisbaneDriver::HI_malloc1D(const void *hostPtr, void **devPtr, size_
 			for( it = memPool->begin(); it != memPool->end(); ++it ) {
 				tDevPtr = it->second;
     			if( HI_get_device_mem_handle(tDevPtr, &tHandle, tconf->threadID) == HI_success ) { 
-      				err = brisbane_mem_release((brisbane_mem) tHandle.basePtr);
+      				err = brisbane_mem_release((brisbane_mem) tHandle.memHandle);
       				if (err != BRISBANE_OK) fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err);
       				HI_remove_device_mem_handle(tDevPtr, tconf->threadID);
       				free(tDevPtr);
@@ -694,7 +708,7 @@ HI_error_t BrisbaneDriver::HI_malloc1D(const void *hostPtr, void **devPtr, size_
 			for( it = memPool->begin(); it != memPool->end(); ++it ) {
 				tDevPtr = it->second;
     			if( HI_get_device_mem_handle(tDevPtr, &tHandle, tconf->threadID) == HI_success ) { 
-      				err = brisbane_mem_release((brisbane_mem) tHandle.basePtr);
+      				err = brisbane_mem_release((brisbane_mem) tHandle.memHandle);
       				if (err != BRISBANE_OK) fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err);
       				HI_remove_device_mem_handle(tDevPtr, tconf->threadID);
       				free(tDevPtr);
@@ -758,12 +772,17 @@ HI_error_t BrisbaneDriver::HI_memcpy(void *dst, const void *src, size_t count, H
   		threadtaskmapbrisbane_t *asyncTaskMap = threadAsyncTaskMap[threadID];
 		int default_async = DEFAULT_QUEUE+tconf->asyncID_offset;
   		int currentAsync = threadAsyncMap[threadID];
-  		brisbane_task task = threadTaskMap[threadID];
+  		brisbane_task task;
+        bool task_exist = false;
+        if( threadTaskMap.count(threadID) > 0 ) {
+  		  task = threadTaskMap[threadID];
+          task_exist = true;
+        }
   		int nestingLevel = threadTaskMapNesting[threadID];
-  		if( (task == NULL) && (nestingLevel == 0) ) {
+  		if( !task_exist && (nestingLevel == 0) ) {
         	brisbane_task_create(&task);
 		}
-        brisbane_task_h2d(task, (brisbane_mem) tHandle.basePtr, tHandle.offset, count, (void*) src);
+        brisbane_task_h2d(task, (brisbane_mem) tHandle.memHandle, tHandle.offset, count, (void*) src);
   		if( nestingLevel == 0 ) {
 #if BRISBANE_TASK_SUBMIT_MODE == 0
   			brisbane_task_submit(task, HI_getBrisbaneDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, true);
@@ -807,12 +826,17 @@ HI_error_t BrisbaneDriver::HI_memcpy(void *dst, const void *src, size_t count, H
   			threadtaskmapbrisbane_t *asyncTaskMap = threadAsyncTaskMap[threadID];
 			int default_async = DEFAULT_QUEUE+tconf->asyncID_offset;
   			int currentAsync = threadAsyncMap[threadID];
-  			brisbane_task task = threadTaskMap[threadID];
+  			brisbane_task task;
+            bool task_exist = false;
+            if( threadTaskMap.count(threadID) > 0 ) {
+  			  task = threadTaskMap[threadID];
+              task_exist = true;
+            }
   			int nestingLevel = threadTaskMapNesting[threadID];
-  			if( (task == NULL) && (nestingLevel == 0) ) {
+  			if( !task_exist && (nestingLevel == 0) ) {
         		brisbane_task_create(&task);
 			}
-        	brisbane_task_d2h(task, (brisbane_mem) tHandle.basePtr, tHandle.offset, count, dst);
+        	brisbane_task_d2h(task, (brisbane_mem) tHandle.memHandle, tHandle.offset, count, dst);
   			if( nestingLevel == 0 ) {
 #if BRISBANE_TASK_SUBMIT_MODE == 0
   				brisbane_task_submit(task, HI_getBrisbaneDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, true);
@@ -931,7 +955,7 @@ HI_error_t BrisbaneDriver::HI_free( const void *hostPtr, int asyncID, int thread
 #else
     		HI_device_mem_handle_t tHandle;
     		if( HI_get_device_mem_handle(devPtr, &tHandle, tconf->threadID) == HI_success ) { 
-      			err = brisbane_mem_release((brisbane_mem) tHandle.basePtr);
+      			err = brisbane_mem_release((brisbane_mem) tHandle.memHandle);
       			if (err != BRISBANE_OK) fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err);
             	HI_remove_device_address(hostPtr, asyncID, tconf->threadID);
       			HI_remove_device_mem_handle(devPtr, tconf->threadID);
@@ -1009,12 +1033,17 @@ HI_error_t BrisbaneDriver::HI_memcpy_async(void *dst, const void *src, size_t co
     {
       HI_device_mem_handle_t tHandle;
       if( HI_get_device_mem_handle(dst, &tHandle, tconf->threadID) == HI_success ) {
-  		brisbane_task task = threadTaskMap[threadID];
+  		brisbane_task task;
+        bool task_exist;
+        if( threadTaskMap.count(threadID) > 0 ) {
+  		  brisbane_task task = threadTaskMap[threadID];
+          task_exist = true;
+        }
   		int nestingLevel = threadTaskMapNesting[threadID];
-  		if( (task == NULL) && (nestingLevel == 0) ) {
+  		if( !task_exist && (nestingLevel == 0) ) {
         	brisbane_task_create(&task);
 		}
-        brisbane_task_h2d(task, (brisbane_mem) tHandle.basePtr, tHandle.offset, count, (void*) src);
+        brisbane_task_h2d(task, (brisbane_mem) tHandle.memHandle, tHandle.offset, count, (void*) src);
   		if( nestingLevel == 0 ) {
 			if( asyncTaskMap->count(async) > 0 ) {
 #ifdef _OPENARC_PROFILE_
@@ -1058,12 +1087,17 @@ HI_error_t BrisbaneDriver::HI_memcpy_async(void *dst, const void *src, size_t co
     {
 		HI_device_mem_handle_t tHandle;
 		if( HI_get_device_mem_handle(src, &tHandle, tconf->threadID) == HI_success ) {
-  			brisbane_task task = threadTaskMap[threadID];
+  			brisbane_task task;
+            bool task_exist = false;
+            if( threadTaskMap.count(threadID) > 0 ) {
+  			  brisbane_task task = threadTaskMap[threadID];
+              task_exist = true;
+            }
   			int nestingLevel = threadTaskMapNesting[threadID];
-  			if( (task == NULL) && (nestingLevel == 0) ) {
+  			if( !task_exist && (nestingLevel == 0) ) {
         		brisbane_task_create(&task);
 			}
-        	brisbane_task_d2h(task, (brisbane_mem) tHandle.basePtr, tHandle.offset, count, dst);
+        	brisbane_task_d2h(task, (brisbane_mem) tHandle.memHandle, tHandle.offset, count, dst);
   			if( nestingLevel == 0 ) {
 				if( asyncTaskMap->count(async) > 0 ) {
 #ifdef _OPENARC_PROFILE_
@@ -1210,7 +1244,7 @@ void BrisbaneDriver::HI_tempFree( void* tempPtr, acc_device_t devType, int threa
 			{
     			HI_device_mem_handle_t tHandle;
     			if( HI_get_device_mem_handle(tempPtr, &tHandle, tconf->threadID) == HI_success ) { 
-      				err = brisbane_mem_release((brisbane_mem) tHandle.basePtr);
+      				err = brisbane_mem_release((brisbane_mem) tHandle.memHandle);
       				if (err != BRISBANE_OK) fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err);
       				free(tempPtr);
       				HI_remove_device_mem_handle(tempPtr, tconf->threadID);
@@ -1295,7 +1329,7 @@ void BrisbaneDriver::HI_tempMalloc1D( void** tempPtr, size_t count, acc_device_t
 #endif
 		{
 			int err;
-			void * memHandle;
+			brisbane_mem memHandle;
 #if VICTIM_CACHE_MODE > 0
 			if( current_mempool_size > tconf->max_mempool_size ) {
 #ifdef _OPENARC_PROFILE_
@@ -1308,7 +1342,7 @@ void BrisbaneDriver::HI_tempMalloc1D( void** tempPtr, size_t count, acc_device_t
                 for (it = memPool->begin(); it != memPool->end(); ++it) {
 					tDevPtr = it->second;
     				if( HI_get_device_mem_handle(tDevPtr, &tHandle, tconf->threadID) == HI_success ) { 
-      					err = brisbane_mem_release((brisbane_mem) tHandle.basePtr);
+      					err = brisbane_mem_release((brisbane_mem) tHandle.memHandle);
       					if (err != BRISBANE_OK) fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err);
       					HI_remove_device_mem_handle(tDevPtr, tconf->threadID);
       					free(tDevPtr);
@@ -1335,7 +1369,7 @@ void BrisbaneDriver::HI_tempMalloc1D( void** tempPtr, size_t count, acc_device_t
                 for (it = memPool->begin(); it != memPool->end(); ++it) {
 					tDevPtr = it->second;
     				if( HI_get_device_mem_handle(tDevPtr, &tHandle, tconf->threadID) == HI_success ) { 
-      					err = brisbane_mem_release((brisbane_mem) tHandle.basePtr);
+      					err = brisbane_mem_release((brisbane_mem) tHandle.memHandle);
       					if (err != BRISBANE_OK) fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err);
       					HI_remove_device_mem_handle(tDevPtr, tconf->threadID);
       					free(tDevPtr);
@@ -1431,7 +1465,7 @@ void BrisbaneDriver::HI_tempMalloc1D_async( void** tempPtr, size_t count, acc_de
 #endif
 		{
 			int err;
-			void * memHandle;
+			brisbane_mem  memHandle;
 #if VICTIM_CACHE_MODE > 0
 			if( current_mempool_size > tconf->max_mempool_size ) {
 #ifdef _OPENARC_PROFILE_
@@ -1444,7 +1478,7 @@ void BrisbaneDriver::HI_tempMalloc1D_async( void** tempPtr, size_t count, acc_de
                 for (it = memPool->begin(); it != memPool->end(); ++it) {
 					tDevPtr = it->second;
     				if( HI_get_device_mem_handle(tDevPtr, &tHandle, tconf->threadID) == HI_success ) { 
-      					err = brisbane_mem_release((brisbane_mem) tHandle.basePtr);
+      					err = brisbane_mem_release((brisbane_mem) tHandle.memHandle);
       					if (err != BRISBANE_OK) fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err);
       					HI_remove_device_mem_handle(tDevPtr, tconf->threadID);
       					free(tDevPtr);
@@ -1471,7 +1505,7 @@ void BrisbaneDriver::HI_tempMalloc1D_async( void** tempPtr, size_t count, acc_de
                 for (it = memPool->begin(); it != memPool->end(); ++it) {
 					tDevPtr = it->second;
     				if( HI_get_device_mem_handle(tDevPtr, &tHandle, tconf->threadID) == HI_success ) { 
-      					err = brisbane_mem_release((brisbane_mem) tHandle.basePtr);
+      					err = brisbane_mem_release((brisbane_mem) tHandle.memHandle);
       					if (err != BRISBANE_OK) fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err);
       					HI_remove_device_mem_handle(tDevPtr, tconf->threadID);
       					free(tDevPtr);
@@ -1690,7 +1724,7 @@ void BrisbaneDriver::HI_malloc(void **devPtr, size_t size, HI_MallocKind_t flags
 #endif
   HostConf_t * tconf = getHostConf(threadID);
   int err;
-  void * memHandle;
+  brisbane_mem memHandle;
   err = brisbane_mem_create(size, (brisbane_mem*) &memHandle);
   if (err != BRISBANE_OK) fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err);
   *devPtr = malloc(size);
@@ -1729,7 +1763,7 @@ void BrisbaneDriver::HI_free(void *devPtr, int threadID) {
   if( (HI_get_device_address(devPtr, &devPtr2, NULL, &memSize, DEFAULT_QUEUE+tconf->asyncID_offset, tconf->threadID) == HI_error) || (devPtr != devPtr2) ) {
     HI_device_mem_handle_t tHandle;
     if( HI_get_device_mem_handle(devPtr, &tHandle, tconf->threadID) == HI_success ) { 
-      err = brisbane_mem_release((brisbane_mem) tHandle.basePtr);
+      err = brisbane_mem_release((brisbane_mem) tHandle.memHandle);
       if (err != BRISBANE_OK) fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err);
       free(devPtr);
       HI_remove_device_mem_handle(devPtr, tconf->threadID);
@@ -1789,14 +1823,14 @@ HI_error_t BrisbaneDriver::createKernelArgMap(int threadID) {
 	int thread_id = tconf->threadID;
   if (masterHandleTable.count(thread_id) == 0) {
     masterAddressTableMap[thread_id] = new addresstable_t();
-    masterHandleTable[thread_id] = new addressmap_t();
+    masterHandleTable[thread_id] = new memhandlemap_t();
     postponedFreeTableMap[thread_id] = new asyncfreetable_t();
     postponedTempFreeTableMap[thread_id] = new asynctempfreetable_t();
     postponedTempFreeTableMap2[thread_id] = new asynctempfreetable2_t();
     memPoolMap[thread_id] = new memPool_t();
     tempMallocSizeMap[thread_id] = new sizemap_t();
   	threadAsyncMap[threadID] = NO_QUEUE;
-  	threadTaskMap[thread_id] = NULL;
+  	//threadTaskMap[thread_id] = NULL;
   	threadTaskMapNesting[thread_id] = 0;
     threadHostMemFreeMap[thread_id] = new pointerset_t();
   }
@@ -1815,16 +1849,21 @@ HI_error_t BrisbaneDriver::HI_bind_texref(std::string texName,  HI_datatype_t ty
   const char* name = texName.c_str();
   int default_async = DEFAULT_QUEUE+tconf->asyncID_offset;
   int currentAsync = threadAsyncMap[threadID];
-  brisbane_task task = threadTaskMap[threadID];
+  brisbane_task task;
+  bool task_exist = false;
+  if( threadTaskMap.count(threadID) > 0 ) {
+    brisbane_task task = threadTaskMap[threadID];
+    task_exist = true;
+  }
   int nestingLevel = threadTaskMapNesting[threadID];
   threadtaskmapbrisbane_t *asyncTaskMap = threadAsyncTaskMap[threadID];
   pointerset_t *tmpHostMemSet = threadHostMemFreeMap[threadID];
   if( HI_get_device_mem_handle(devPtr, &tHandle, tconf->threadID) == HI_success ) {
-  	if( (task == NULL) && (nestingLevel == 0) ) {
+  	if( !task_exist && (nestingLevel == 0) ) {
     	brisbane_task_create(&task);
 	}
     void* tmp = malloc(size);
-    brisbane_task_h2d(task, (*((brisbane_mem*) &tHandle)), 0, size, tmp);
+    brisbane_task_h2d(task, tHandle.memHandle, 0, size, tmp);
   	if( nestingLevel == 0 ) {
 #if BRISBANE_TASK_SUBMIT_MODE == 0
     	brisbane_task_submit(task, HI_getBrisbaneDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, true);
@@ -1860,11 +1899,11 @@ HI_error_t BrisbaneDriver::HI_bind_texref(std::string texName,  HI_datatype_t ty
   if( HI_get_device_mem_handle(devPtr, &tHandle, tconf->threadID) == HI_success ) {
   }
 */
-  void* dptr = (*(void**) &tHandle);
+  brisbane_mem mHandle = tHandle.memHandle;
 
   size_t name_len = strlen(name) + 1;
   int tp = (type == HI_int) ? brisbane_int : (type == HI_float) ? brisbane_float : -1;
-  size_t params_size = sizeof(name_len) + name_len + sizeof(tp) + sizeof(dptr) + sizeof(size);
+  size_t params_size = sizeof(name_len) + name_len + sizeof(tp) + sizeof(mHandle) + sizeof(size);
   char* params = (char*) malloc(params_size);
   int off = 0;
   memcpy(params + off, &name_len, sizeof(name_len));
@@ -1873,8 +1912,8 @@ HI_error_t BrisbaneDriver::HI_bind_texref(std::string texName,  HI_datatype_t ty
   off += name_len;
   memcpy(params + off, &tp, sizeof(tp));
   off += sizeof(tp);
-  memcpy(params + off, &dptr, sizeof(dptr));
-  off += sizeof(dptr);
+  memcpy(params + off, &mHandle, sizeof(mHandle));
+  off += sizeof(mHandle);
   memcpy(params + off, &size, sizeof(size));
   off += sizeof(size);
 
@@ -2352,7 +2391,10 @@ void BrisbaneDriver::HI_enter_subregion(const char *label, int threadID) {
         fprintf(stderr, "[OPENARCRT-INFO]\t\tenter BrisbaneDriver::HI_enter_subregion (label = %s, nestlevel = %d, thread ID = %d)\n", label, nestingLevel, threadID);
     }
 #endif
-  	brisbane_task task = threadTaskMap[threadID];
+  	brisbane_task task;
+    if( threadTaskMap.count(threadID) > 0 ) {
+  	  task = threadTaskMap[threadID];
+    }
 	if( nestingLevel == 0 ) {
 #ifdef _OPENARC_PROFILE_
     if( HI_openarcrt_verbosity > 2 ) {
@@ -2379,12 +2421,17 @@ void BrisbaneDriver::HI_exit_subregion(const char *label, int threadID) {
     }
 #endif
   	int currentAsync = threadAsyncMap[threadID];
-  	brisbane_task task = threadTaskMap[threadID];
+  	brisbane_task task;
+    bool task_exist = false;
+    if( threadTaskMap.count(threadID) > 0 ) {
+  	  task = threadTaskMap[threadID];
+      task_exist = true;
+    }
 	threadtaskmapbrisbane_t *asyncTaskMap = threadAsyncTaskMap[threadID];
     pointerset_t *tmpHostMemSet = threadHostMemFreeMap[threadID];
 	nestingLevel--;
 	if( nestingLevel <= 0 ) {
-		if( task != NULL ) {
+		if( task_exist ) {
 			int memcpy_cmd_option = 0;
 #if OPT_MEMCPY_ONLY_POLICY == 2
 			int d2hmemcpy_cmds_cnt = 0;
@@ -2445,7 +2492,7 @@ void BrisbaneDriver::HI_exit_subregion(const char *label, int threadID) {
 					}
 					tmpHostMemSet->clear();
 				}
-  				threadTaskMap[threadID] = NULL;
+  				threadTaskMap.erase(threadID);
   				threadAsyncMap[threadID] = NO_QUEUE;
 				threadTaskMapNesting[threadID] = 0;
 #else
@@ -2479,7 +2526,7 @@ void BrisbaneDriver::HI_exit_subregion(const char *label, int threadID) {
 						}
 						tmpHostMemSet->clear();
 					}
-  					threadTaskMap[threadID] = NULL;
+  					threadTaskMap.erase(threadID);
   					threadAsyncMap[threadID] = NO_QUEUE;
 					threadTaskMapNesting[threadID] = 0;
 				} else {
@@ -2503,7 +2550,7 @@ void BrisbaneDriver::HI_exit_subregion(const char *label, int threadID) {
     					brisbane_task_submit(task, HI_getBrisbaneDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option), NULL, false);
 					}
 					(*asyncTaskMap)[currentAsync] = task;
-  					threadTaskMap[threadID] = NULL;
+  					threadTaskMap.erase(threadID);
   					threadAsyncMap[threadID] = NO_QUEUE;
 					threadTaskMapNesting[threadID] = 0;
 #ifdef _OPENARC_PROFILE_
@@ -2531,7 +2578,7 @@ void BrisbaneDriver::HI_exit_subregion(const char *label, int threadID) {
     				brisbane_task_submit(task, HI_getBrisbaneDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option), NULL, false);
 				}
 				(*asyncTaskMap)[currentAsync] = task;
-  				threadTaskMap[threadID] = NULL;
+  				threadTaskMap.erase(threadID);
   				threadAsyncMap[threadID] = NO_QUEUE;
 				threadTaskMapNesting[threadID] = 0;
 #ifdef _OPENARC_PROFILE_

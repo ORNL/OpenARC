@@ -25,6 +25,8 @@
 	#pragma openarc #define I_SIZE 65537
 #elif I_SIZE == 655361
 	#pragma openarc #define I_SIZE 655361
+#elif I_SIZE == 3276801
+    #pragma openarc #define I_SIZE 3276801
 #elif I_SIZE == 6553601
 	#pragma openarc #define I_SIZE 6553601
 #endif

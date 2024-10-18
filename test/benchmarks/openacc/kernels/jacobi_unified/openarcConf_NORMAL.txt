@@ -390,7 +390,7 @@ defaultNumWorkers=128
 ###############################
 #outdir=cetus_output
 #macro=SAVE_OUTPUT=1,I_SIZE=6553601
-macro=DUMMY=1,VERIFICATION=1,SIZE=__inputSize__
+macro=DUMMY=1,VERIFICATION=1,ASIZE=__inputSize__
 #dump-options
 #dump-system-options
 #induction

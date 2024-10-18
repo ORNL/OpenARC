@@ -7,8 +7,14 @@
 
 //Below macro is used to configure task behaviors assigned to the default queue.
 //Set IRIS_TASK_SUBMIT_MODE = 0 to submit a task synchronously
-//                                1 to submit a task asynchronously if the task contains only a kernel
+//                            1 to submit a task asynchronously if the task contains only a kernel
+#if VICTIM_CACHE_MODE == 0
+//If VICTIM_CACHE_MODE == 0, IRIS_TASK_SUBMIT_MODE should be set to 0.
+#define IRIS_TASK_SUBMIT_MODE 0
+#else
+//If VICTIM_CACHE_MODE == 1, IRIS_TASK_SUBMIT_MODE can be set to 0 or 1.
 #define IRIS_TASK_SUBMIT_MODE 1
+#endif
 //Below macro is used to optimize IRIS tasks with memory transfers only, when users choose to use IRIS policy.
 //Set OPT_MEMCPY_ONLY_POLICY = 2 to apply iris policy to IRIS tasks with H2D memory transfers only 
 //                               and iris policy to IRIS tasks with D2H memory transfers only
@@ -17,14 +23,15 @@
 #define OPT_MEMCPY_ONLY_POLICY 2
 
 static const char *openarcrt_iris_policy_env = "OPENARCRT_IRIS_POLICY";
+static const char *openarcrt_iris_dmem_env = "OPENARCRT_IRIS_DMEM";
 static const char *iris_policy_roundrobin = "iris_roundrobin";
 static const char *iris_policy_depend = "iris_depend";
 static const char *iris_policy_data = "iris_data";
 static const char *iris_policy_profile = "iris_profile";
 static const char *iris_policy_random = "iris_random";
 static const char *iris_policy_pending = "iris_pending";
-static const char *iris_policy_any = "iris_any";
-static const char *iris_policy_all = "iris_all";
+static const char *iris_policy_sdq = "iris_sdq";
+static const char *iris_policy_ftf = "iris_ftf";
 static const char *iris_policy_custom = "iris_custom";
 
 //Below structures contain IRIS device IDs for a given device type.
@@ -36,6 +43,7 @@ std::vector<int> IrisDriver::FPGADeviceIDs;
 std::vector<int> IrisDriver::PhiDeviceIDs;
 std::vector<int> IrisDriver::DefaultDeviceIDs;
 int IrisDriver::openarcrt_iris_policy;
+int IrisDriver::openarcrt_iris_dmem;
 
 int IrisDriver::HI_getIrisDeviceID(acc_device_t devType, acc_device_t userInput, int devnum, int memTrOnly) {
 #ifdef _OPENARC_PROFILE_
@@ -182,17 +190,17 @@ int bind_tex_handler(void* p, void* device) {
   off += name_len;
   int type = *((int*) (params + off));
   off += sizeof(type);
-  void* dptr = *((void**) (params + off));
-  off += sizeof(dptr);
+  iris_mem mHandle = *((iris_mem*) (params + off));
+  off += sizeof(mHandle);
   size_t size = *((size_t*) (params + off));
-  //printf("[%s:%d] namelen[%lu] name[%s] type[%d] dptr[%p] size[%lu]\n", __FILE__, __LINE__, name_len, name, type, dptr, size);
+  //printf("[%s:%d] namelen[%lu] name[%s] type[%d] mHandle[%d] size[%lu]\n", __FILE__, __LINE__, name_len, name, type, mHandle, size);
 
   CUtexref tex;
   CUresult err;
-  iris_mem m = (iris_mem) dptr;
+  iris_mem m = (iris_mem) mHandle;
   iris::rt::DeviceCUDA* dev = (iris::rt::DeviceCUDA*) device;
   iris::rt::LoaderCUDA* ld = dev->ld();
-  iris::rt::Mem* mem = m->class_obj;
+  iris::rt::Mem* mem = (iris::rt::Mem*)m.class_obj;
   err = ld->cuModuleGetTexRef(&tex, *(dev->module()), name);
   if (err != CUDA_SUCCESS) printf("[%s:%d] err[%d]\n", __FILE__, __LINE__, err);
   err = ld->cuTexRefSetAddress(0, tex, (CUdeviceptr) mem->arch(dev), size);
@@ -277,10 +285,10 @@ HI_error_t IrisDriver::init(int threadID) {
 		openarcrt_iris_policy = iris_profile;
 	} else if( strcmp(envVar, iris_policy_random) == 0 ) {
 		openarcrt_iris_policy = iris_random;
-	} else if( strcmp(envVar, iris_policy_any) == 0 ) {
-		openarcrt_iris_policy = iris_any;
-	} else if( strcmp(envVar, iris_policy_all) == 0 ) {
-		openarcrt_iris_policy = iris_all;
+	} else if( strcmp(envVar, iris_policy_sdq) == 0 ) {
+		openarcrt_iris_policy = iris_sdq;
+	} else if( strcmp(envVar, iris_policy_ftf) == 0 ) {
+		openarcrt_iris_policy = iris_ftf;
 	} else if( strcmp(envVar, iris_policy_custom) == 0 ) {
 		openarcrt_iris_policy = iris_custom;
 	} else {
@@ -296,14 +304,15 @@ HI_error_t IrisDriver::init(int threadID) {
 */
 
   masterAddressTableMap[thread_id] = new addresstable_t();
-  masterHandleTable[thread_id] = new addressmap_t();
+  masterHandleTable[thread_id] = new memhandlemap_t();
   postponedFreeTableMap[thread_id] = new asyncfreetable_t();
   postponedTempFreeTableMap[thread_id] = new asynctempfreetable_t();
   postponedTempFreeTableMap2[thread_id] = new asynctempfreetable2_t();
   memPoolMap[thread_id] = new memPool_t();
+  tempMemPoolMap[thread_id] = new memPool_t();
   tempMallocSizeMap[thread_id] = new sizemap_t();
   threadAsyncMap[thread_id] = NO_QUEUE;
-  threadTaskMap[thread_id] = NULL;
+  //threadTaskMap[thread_id] = NULL;
   threadAsyncTaskMap[thread_id] = new threadtaskmapiris_t();
   threadTaskMapNesting[thread_id] = 0;
   threadHostMemFreeMap[thread_id] = new pointerset_t();
@@ -377,6 +386,7 @@ HI_error_t IrisDriver::HI_register_kernel_numargs(std::string kernel_name, int n
       kernelParams->kernelParams = (void**)malloc(sizeof(void*) * num_args);
       kernelParams->kernelParamsOffset = (size_t*)malloc(sizeof(size_t) * num_args);
       kernelParams->kernelParamsInfo = (int*)malloc(sizeof(int) * num_args);
+      kernelParams->kernelParamMems = (iris_mem*)malloc(sizeof(iris_mem) * num_args);
     } else {
       fprintf(stderr, "[ERROR in IrisDriver::HI_register_kernel_numargs(%s, %d)] num_args should be greater than zero.\n",kernel_name.c_str(), num_args);
       exit(1);
@@ -406,11 +416,13 @@ HI_error_t IrisDriver::HI_register_kernel_arg(std::string kernel_name, int arg_i
     *(kernelParams->kernelParams + arg_index) = arg_value;
     *(kernelParams->kernelParamsOffset + arg_index) = 0;
     *(kernelParams->kernelParamsInfo + arg_index) = (int)arg_size;
+     iris_mem iMem;
+    *(kernelParams->kernelParamMems + arg_index) = iMem;
     //err = iris_kernel_setarg((iris_kernel)(tconf->kernelsMap.at(this).at(kernel_name)), arg_index, arg_size, arg_value);
   } else {
     HI_device_mem_handle_t tHandle;
     if( HI_get_device_mem_handle(*((void **)arg_value), &tHandle, tconf->threadID) == HI_success ) {
-      *(kernelParams->kernelParams + arg_index) = tHandle.basePtr;
+      *(kernelParams->kernelParams + arg_index) = NULL;
       //*(kernelParams->kernelParamsOffset + arg_index) = 0 - tHandle.offset;
       //*(kernelParams->kernelParamsOffset + arg_index) = tHandle.offset/unitSize;
       *(kernelParams->kernelParamsOffset + arg_index) = tHandle.offset;
@@ -423,8 +435,8 @@ HI_error_t IrisDriver::HI_register_kernel_arg(std::string kernel_name, int arg_i
       } else { //unknown or temporary
       	*(kernelParams->kernelParamsInfo + arg_index) = 0;
       }
-      
-      //err = iris_kernel_setmem_off((iris_kernel)(tconf->kernelsMap.at(this).at(kernel_name)), arg_index, *((iris_mem*) &(tHandle.basePtr)), tHandle.offset, iris_rw);
+      *(kernelParams->kernelParamMems + arg_index) = tHandle.memHandle;
+      //err = iris_kernel_setmem_off((iris_kernel)(tconf->kernelsMap.at(this).at(kernel_name)), arg_index, *((iris_mem*) &(tHandle.memHandle)), tHandle.offset, iris_rw);
       //if (err != IRIS_SUCCESS) fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err);
     } else {
 		fprintf(stderr, "[ERROR in IrisDriver::HI_register_kernel_arg()] Cannot find a device pointer to memory handle mapping; failed to add argument %d to kernel %s (IRIS Device)\n", arg_index, kernel_name.c_str());
@@ -453,15 +465,26 @@ HI_error_t IrisDriver::HI_kernel_call(std::string kernel_name, size_t gridSize[3
 #ifdef _OPENARC_PROFILE_
     double ltime = HI_get_localtime();
 #endif
-  int err;
+  int err = IRIS_SUCCESS;
   int currentAsync = threadAsyncMap[threadID];
-  iris_task task = threadTaskMap[threadID];
+  bool task_exist = false;
+  iris_task task;
+  if( threadTaskMap.count(threadID) > 0 ) {
+  	task = threadTaskMap[threadID];
+    task_exist = true;
+  }
   int nestingLevel = threadTaskMapNesting[threadID];
-  if( (task == NULL) && (nestingLevel == 0) ) {
+  if( !task_exist && (nestingLevel == 0) ) {
     iris_task_create(&task);
   }
   size_t gws[3] = { gridSize[0] * blockSize[0], gridSize[1] * blockSize[1], gridSize[2] * blockSize[2] };
   kernelParams_t *kernelParams = tconf->kernelArgsMap.at(this).at(kernel_name);
+  int num_args = kernelParams->num_args;
+  for(int i=0; i<num_args; i++) {
+    if( kernelParams->kernelParams[i] == NULL ) {
+        kernelParams->kernelParams[i] = &(kernelParams->kernelParamMems[i]);
+    }
+  }
   //iris_task_kernel(task, kernel_name.c_str(), 3, NULL, gws, blockSize, kernelParams->num_args, kernelParams->kernelParams, kernelParams->kernelParamsInfo);
   iris_task_kernel_v2(task, kernel_name.c_str(), 3, NULL, gws, blockSize, kernelParams->num_args, kernelParams->kernelParams, kernelParams->kernelParamsOffset, kernelParams->kernelParamsInfo);
 
@@ -489,7 +512,8 @@ HI_error_t IrisDriver::HI_kernel_call(std::string kernel_name, size_t gridSize[3
 		if( nTasks > 0 ) {
 			iris_task_depend(task, nTasks, dependTaskList); 
 		}
-    	iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, true);
+		err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, true);
+		if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
 		delete[] dependTaskList;
     	iris_task_release(task);
 #else
@@ -501,14 +525,17 @@ HI_error_t IrisDriver::HI_kernel_call(std::string kernel_name, size_t gridSize[3
 		if( asyncTaskMap->count(async) > 0 ) {
 			dependTaskList[nTasks++] = asyncTaskMap->at(async);
 			iris_task_depend(task, nTasks, dependTaskList); 
-    		iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, false);
+			err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, false);
+			if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
 			iris_task_release(asyncTaskMap->at(async));
 			delete[] dependTaskList;
 		} else {	
 			if( nTasks > 0 ) {
 				iris_task_depend(task, nTasks, dependTaskList); 
 			}
-    		iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, false);
+
+			err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, false);
+			if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
 			delete[] dependTaskList;
 		}
 		(*asyncTaskMap)[async] = task;
@@ -522,7 +549,8 @@ HI_error_t IrisDriver::HI_kernel_call(std::string kernel_name, size_t gridSize[3
 #endif
 			dependTaskList[nTasks++] = asyncTaskMap->at(async);
 			iris_task_depend(task, nTasks, dependTaskList); 
-    		iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, false);
+			err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, false);
+			if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
 			iris_task_release(asyncTaskMap->at(async));
 			delete[] dependTaskList;
 		} else {
@@ -534,7 +562,9 @@ HI_error_t IrisDriver::HI_kernel_call(std::string kernel_name, size_t gridSize[3
 			if( nTasks > 0 ) {
 				iris_task_depend(task, nTasks, dependTaskList); 
 			}
-    		iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, false);
+
+			err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, false);
+			if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
 			delete[] dependTaskList;
 		}
 		(*asyncTaskMap)[async] = task;
@@ -618,6 +648,7 @@ HI_error_t IrisDriver::destroy(int threadID) {
 	PhiDeviceIDs.clear();
 	DefaultDeviceIDs.clear();
 	openarcrt_iris_policy = 0;
+	openarcrt_iris_dmem = 1;
 #ifdef PRINT_TODO
 	fprintf(stderr, "[%s:%d][%s] Not Implemented!\n", __FILE__, __LINE__, __func__);
 #endif
@@ -636,9 +667,15 @@ HI_error_t IrisDriver::HI_malloc1D(const void *hostPtr, void **devPtr, size_t co
         fprintf(stderr, "[OPENARCRT-INFO]\t\tenter IrisDriver::HI_malloc1D(hostPtr = %lx, asyncID = %d, size = %lu, thread ID = %d)\n",(long unsigned int)hostPtr, asyncID, count, threadID);
     }
 #endif
+
+  void* uc_hostPtr = NULL;
+  if( openarcrt_iris_dmem == 1 ) {
+    uc_hostPtr = const_cast<void*>(hostPtr);
+  }
+
   HostConf_t * tconf = getHostConf(threadID);
   int err;
-  void * memHandle;
+  iris_mem memHandle;
   if(HI_get_device_address(hostPtr, devPtr, NULL, NULL, asyncID, tconf->threadID) == HI_success ) {
 	if( unifiedMemSupported ) {
 		err = HI_success;
@@ -654,6 +691,13 @@ HI_error_t IrisDriver::HI_malloc1D(const void *hostPtr, void **devPtr, size_t co
       *devPtr = it->second;
       memPool->erase(it);
       current_mempool_size -= count;
+      if( openarcrt_iris_dmem == 1 ) {
+        HI_device_mem_handle_t tHandle;
+        HI_get_device_mem_handle(*devPtr, &tHandle, tconf->threadID);
+		if( openarcrt_iris_dmem == 1 ) {
+          iris_data_mem_update((iris_mem) tHandle.memHandle, uc_hostPtr);
+        }
+      }
       HI_set_device_address(hostPtr, *devPtr, count, asyncID, tconf->threadID);
 	} else
 #endif
@@ -665,7 +709,7 @@ HI_error_t IrisDriver::HI_malloc1D(const void *hostPtr, void **devPtr, size_t co
 			for( it = memPool->begin(); it != memPool->end(); ++it ) {
 				tDevPtr = it->second;
     			if( HI_get_device_mem_handle(tDevPtr, &tHandle, tconf->threadID) == HI_success ) { 
-      				err = iris_mem_release((iris_mem) tHandle.basePtr);
+					err = iris_mem_release((iris_mem) tHandle.memHandle);
       				if (err != IRIS_SUCCESS) fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err);
       				HI_remove_device_mem_handle(tDevPtr, tconf->threadID);
       				free(tDevPtr);
@@ -678,8 +722,16 @@ HI_error_t IrisDriver::HI_malloc1D(const void *hostPtr, void **devPtr, size_t co
 			}	
 			memPool->clear();
 		}
-#endif
-      	err = iris_mem_create(count, (iris_mem*) &memHandle);
+#endif	
+		
+		if( openarcrt_iris_dmem == 1 ) {
+			//fprintf(stdout, "[IRIS DMEM CREATE]\n");
+			err = iris_data_mem_create((iris_mem*) &memHandle, uc_hostPtr, count);
+		} else {
+			//fprintf(stdout, "[IRIS MEM CREATE]\n");
+      		err = iris_mem_create(count, (iris_mem*) &memHandle);
+		}
+
 #if VICTIM_CACHE_MODE > 0
       	if (err != IRIS_SUCCESS) {
     		HI_device_mem_handle_t tHandle;
@@ -687,7 +739,7 @@ HI_error_t IrisDriver::HI_malloc1D(const void *hostPtr, void **devPtr, size_t co
 			for( it = memPool->begin(); it != memPool->end(); ++it ) {
 				tDevPtr = it->second;
     			if( HI_get_device_mem_handle(tDevPtr, &tHandle, tconf->threadID) == HI_success ) { 
-      				err = iris_mem_release((iris_mem) tHandle.basePtr);
+					err = iris_mem_release((iris_mem) tHandle.memHandle);
       				if (err != IRIS_SUCCESS) fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err);
       				HI_remove_device_mem_handle(tDevPtr, tconf->threadID);
       				free(tDevPtr);
@@ -699,7 +751,13 @@ HI_error_t IrisDriver::HI_malloc1D(const void *hostPtr, void **devPtr, size_t co
     			}
 			}	
 			memPool->clear();
-      		err = iris_mem_create(count, (iris_mem*) &memHandle);
+			if( openarcrt_iris_dmem == 1 ) {
+				//fprintf(stdout, "[IRIS DMEM CREATE]\n");
+				err = iris_data_mem_create((iris_mem*) &memHandle, uc_hostPtr, count);
+			} else {
+				//fprintf(stdout, "[IRIS MEM CREATE]\n");
+      			err = iris_mem_create(count, (iris_mem*) &memHandle);
+			}
       		if (err != IRIS_SUCCESS) fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err);
 		}
 #endif
@@ -746,20 +804,32 @@ HI_error_t IrisDriver::HI_memcpy(void *dst, const void *src, size_t count, HI_Me
     case HI_MemcpyHostToHost:       memcpy(dst, src, count);                        break;
     case HI_MemcpyHostToDevice:
     {
-      HI_device_mem_handle_t tHandle;
-      if( HI_get_device_mem_handle(dst, &tHandle, tconf->threadID) == HI_success ) {
-  		threadtaskmapiris_t *asyncTaskMap = threadAsyncTaskMap[threadID];
-		int default_async = DEFAULT_QUEUE+tconf->asyncID_offset;
-  		int currentAsync = threadAsyncMap[threadID];
-  		iris_task task = threadTaskMap[threadID];
-  		int nestingLevel = threadTaskMapNesting[threadID];
-  		if( (task == NULL) && (nestingLevel == 0) ) {
-        	iris_task_create(&task);
-		}
-        iris_task_h2d(task, (iris_mem) tHandle.basePtr, tHandle.offset, count, (void*) src);
-  		if( nestingLevel == 0 ) {
+      if( openarcrt_iris_dmem == 1 ) {
+        //fprintf(stdout, "NO NEED TO SPECIFY H2D\n");
+        break;
+      } else {
+        HI_device_mem_handle_t tHandle;
+        if( HI_get_device_mem_handle(dst, &tHandle, tconf->threadID) == HI_success ) {
+  		  threadtaskmapiris_t *asyncTaskMap = threadAsyncTaskMap[threadID];
+		  int default_async = DEFAULT_QUEUE+tconf->asyncID_offset;
+  		  int currentAsync = threadAsyncMap[threadID];
+  		  iris_task task;
+          bool task_exist = false;
+          if( threadTaskMap.count(threadID) > 0 ) {
+  			  task = threadTaskMap[threadID];
+              task_exist = true;
+          }
+  		  int nestingLevel = threadTaskMapNesting[threadID];
+  		  if( !task_exist && (nestingLevel == 0) ) {
+        	  iris_task_create(&task);
+		  }
+		  //fprintf(stdout, "[IRIS MEM HOST TO DEVICE]\n");
+          iris_task_h2d(task, (iris_mem) tHandle.memHandle, tHandle.offset, count, (void*) src);
+  		  if( nestingLevel == 0 ) {
 #if IRIS_TASK_SUBMIT_MODE == 0
-  			iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, true);
+
+			err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, true);
+			if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
         	iris_task_release(task);
 #else
 			if( asyncTaskMap->count(default_async) > 0 ) {
@@ -771,7 +841,9 @@ HI_error_t IrisDriver::HI_memcpy(void *dst, const void *src, size_t count, HI_Me
 #endif
 				iris_task dependTaskList[1] = { asyncTaskMap->at(default_async) };
 				iris_task_depend(task, 1, dependTaskList); 
-    			iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, true);
+	
+				err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, true);
+				if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
 				iris_task_release(dependTaskList[0]);
 				asyncTaskMap->erase(default_async);
 			} else {
@@ -780,18 +852,21 @@ HI_error_t IrisDriver::HI_memcpy(void *dst, const void *src, size_t count, HI_Me
     			if( HI_openarcrt_verbosity > 2 ) {
         			fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_memcpy(%lu, thread ID = %d) submits an IRIS task without dependency to the device %d\n", count, threadID, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var));
     			}
-#endif
-    			iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, true);
+#endif			
+	
+				err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, true);
+				if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
 			}
         	iris_task_release(task);
 #endif
-		} else {
+		  } else {
   			threadAsyncMap[threadID] = default_async;
-		}
-      } else {
-		//[DEBUG] How to handle the error case?
-      }
+		  }
+        } else {
+		  //[DEBUG] How to handle the error case?
+        }
       break;
+      }
     }
     case HI_MemcpyDeviceToHost:
     {
@@ -800,15 +875,31 @@ HI_error_t IrisDriver::HI_memcpy(void *dst, const void *src, size_t count, HI_Me
   			threadtaskmapiris_t *asyncTaskMap = threadAsyncTaskMap[threadID];
 			int default_async = DEFAULT_QUEUE+tconf->asyncID_offset;
   			int currentAsync = threadAsyncMap[threadID];
-  			iris_task task = threadTaskMap[threadID];
+  			iris_task task;
+            bool task_exist = false;
+            if( threadTaskMap.count(threadID) > 0 ) {
+  			    task = threadTaskMap[threadID];
+                task_exist = true;
+            }
   			int nestingLevel = threadTaskMapNesting[threadID];
-  			if( (task == NULL) && (nestingLevel == 0) ) {
+  			if( !task_exist && (nestingLevel == 0) ) {
         		iris_task_create(&task);
 			}
-        	iris_task_d2h(task, (iris_mem) tHandle.basePtr, tHandle.offset, count, dst);
+            if( openarcrt_iris_dmem == 1 ) {
+              iris_mem tMemHandle = tHandle.memHandle;
+              if( iris_mem_get_type(tMemHandle) == iris::rt::IRIS_MEM ) {
+        	    iris_task_d2h(task, (iris_mem) tMemHandle, tHandle.offset, count, dst);
+              } else {
+                iris_task_dmem_flush_out(task, (iris_mem) tMemHandle);
+              }
+            } else {
+        	  iris_task_d2h(task, (iris_mem) tHandle.memHandle, tHandle.offset, count, dst);
+            }
   			if( nestingLevel == 0 ) {
 #if IRIS_TASK_SUBMIT_MODE == 0
-  				iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, true);
+	
+				err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, true);
+				if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
         		iris_task_release(task);
 #else
 				if( asyncTaskMap->count(default_async) > 0 ) {
@@ -819,8 +910,10 @@ HI_error_t IrisDriver::HI_memcpy(void *dst, const void *src, size_t count, HI_Me
     				}
 #endif
 					iris_task dependTaskList[1] = { asyncTaskMap->at(default_async) };
-					iris_task_depend(task, 1, dependTaskList); 
-  					iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, true);
+					iris_task_depend(task, 1, dependTaskList);
+		 
+					err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, true);
+					if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
 					iris_task_release(dependTaskList[0]);
 					asyncTaskMap->erase(default_async);
 				} else {
@@ -829,8 +922,10 @@ HI_error_t IrisDriver::HI_memcpy(void *dst, const void *src, size_t count, HI_Me
     				if( HI_openarcrt_verbosity > 2 ) {
         				fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_memcpy(%lu, thread ID = %d) submits an IRIS task without dependency to the device %d\n", count, threadID, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var));
     				}
-#endif
-    				iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, true);
+#endif				
+		 
+					err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, true);
+					if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
 				}
         		iris_task_release(task);
 #endif
@@ -921,11 +1016,14 @@ HI_error_t IrisDriver::HI_free( const void *hostPtr, int asyncID, int threadID) 
             memPool->insert(std::pair<size_t, void *>(size, devPtr));
             current_mempool_size += size;
             HI_remove_device_address(hostPtr, asyncID, tconf->threadID);
+      		if( openarcrt_iris_dmem == 1 ) {
+				iris_unregister_pin_memory(const_cast<void*>(hostPtr));
+			}
 #else
     		HI_device_mem_handle_t tHandle;
     		if( HI_get_device_mem_handle(devPtr, &tHandle, tconf->threadID) == HI_success ) { 
-      			err = iris_mem_release((iris_mem) tHandle.basePtr);
-      			if (err != IRIS_SUCCESS) fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err);
+				err = iris_mem_release((iris_mem) tHandle.memHandle);
+				if (err != IRIS_SUCCESS) fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err);
             	HI_remove_device_address(hostPtr, asyncID, tconf->threadID);
       			HI_remove_device_mem_handle(devPtr, tconf->threadID);
       			free(devPtr);
@@ -1000,15 +1098,24 @@ HI_error_t IrisDriver::HI_memcpy_async(void *dst, const void *src, size_t count,
     case HI_MemcpyHostToHost:       memcpy(dst, src, count);                        break;
     case HI_MemcpyHostToDevice:
     {
-      HI_device_mem_handle_t tHandle;
-      if( HI_get_device_mem_handle(dst, &tHandle, tconf->threadID) == HI_success ) {
-  		iris_task task = threadTaskMap[threadID];
-  		int nestingLevel = threadTaskMapNesting[threadID];
-  		if( (task == NULL) && (nestingLevel == 0) ) {
+      if( openarcrt_iris_dmem == 1 ) {
+        //fprintf(stdout, "NO NEED TO SPECIFY H2D\n");
+        break;
+      } else {
+        HI_device_mem_handle_t tHandle;
+        if( HI_get_device_mem_handle(dst, &tHandle, tconf->threadID) == HI_success ) {
+  		  iris_task task;
+          bool task_exist = false;
+          if( threadTaskMap.count(threadID) > 0 ) {
+  		    task = threadTaskMap[threadID];
+            task_exist = true;
+          }
+  		  int nestingLevel = threadTaskMapNesting[threadID];
+  		  if( !task_exist && (nestingLevel == 0) ) {
         	iris_task_create(&task);
-		}
-        iris_task_h2d(task, (iris_mem) tHandle.basePtr, tHandle.offset, count, (void*) src);
-  		if( nestingLevel == 0 ) {
+		  }
+          iris_task_h2d(task, (iris_mem) tHandle.memHandle, tHandle.offset, count, (void*) src);
+  		  if( nestingLevel == 0 ) {
 			if( asyncTaskMap->count(async) > 0 ) {
 #ifdef _OPENARC_PROFILE_
 				tconf->BTaskCnt++;	
@@ -1018,7 +1125,8 @@ HI_error_t IrisDriver::HI_memcpy_async(void *dst, const void *src, size_t count,
 #endif
 				dependTaskList[nTasks++] = asyncTaskMap->at(async);
 				iris_task_depend(task, nTasks, dependTaskList); 
-    			iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, false);
+				err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, false);
+				if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
 				iris_task_release(asyncTaskMap->at(async));
 				delete[] dependTaskList;
 			} else {
@@ -1031,32 +1139,48 @@ HI_error_t IrisDriver::HI_memcpy_async(void *dst, const void *src, size_t count,
 				if( nTasks > 0 ) {
 					iris_task_depend(task, nTasks, dependTaskList); 
 				}
-    			iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, false);
+				err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, false);
+				if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
 				delete[] dependTaskList;
 			}
 			(*asyncTaskMap)[async] = task;
-		} else {
+		  } else {
   			if( (currentAsync == NO_QUEUE) && (nTasks > 0) ) {
   				iris_task_depend(task, nTasks, dependTaskList); 
   			}
   			delete[] dependTaskList;
   			threadAsyncMap[threadID] = async;
-		}
-      } else {
-		//[DEBUG] How to handle the error case?
+		  }
+        } else {
+		  //[DEBUG] How to handle the error case?
+        }
+        break;
       }
-      break;
     }
     case HI_MemcpyDeviceToHost:
     {
 		HI_device_mem_handle_t tHandle;
 		if( HI_get_device_mem_handle(src, &tHandle, tconf->threadID) == HI_success ) {
-  			iris_task task = threadTaskMap[threadID];
+  			iris_task task;
+            bool task_exist = false;
+            if( threadTaskMap.count(threadID) > 0 ) {
+  			    task = threadTaskMap[threadID];
+                task_exist = true;
+            }
   			int nestingLevel = threadTaskMapNesting[threadID];
-  			if( (task == NULL) && (nestingLevel == 0) ) {
+  			if( !task_exist && (nestingLevel == 0) ) {
         		iris_task_create(&task);
 			}
-        	iris_task_d2h(task, (iris_mem) tHandle.basePtr, tHandle.offset, count, dst);
+			if( openarcrt_iris_dmem == 1 ) {
+            	iris_mem tMemHandle = tHandle.memHandle;
+            	if( iris_mem_get_type(tMemHandle) == iris::rt::IRIS_MEM ) {
+        	    	iris_task_d2h(task, (iris_mem) tMemHandle, tHandle.offset, count, dst);
+            	} else {
+                	iris_task_dmem_flush_out(task, (iris_mem) tMemHandle);
+            	}
+			} else {
+        		iris_task_d2h(task, (iris_mem) tHandle.memHandle, tHandle.offset, count, dst);
+			}
   			if( nestingLevel == 0 ) {
 				if( asyncTaskMap->count(async) > 0 ) {
 #ifdef _OPENARC_PROFILE_
@@ -1067,7 +1191,8 @@ HI_error_t IrisDriver::HI_memcpy_async(void *dst, const void *src, size_t count,
 #endif
 					dependTaskList[nTasks++] = asyncTaskMap->at(async);
 					iris_task_depend(task, nTasks, dependTaskList); 
-  					iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, false);
+					err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, false);
+					if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
 					iris_task_release(asyncTaskMap->at(async));
 					delete[] dependTaskList;
 				} else {
@@ -1080,7 +1205,8 @@ HI_error_t IrisDriver::HI_memcpy_async(void *dst, const void *src, size_t count,
 					if( nTasks > 0 ) {
 						iris_task_depend(task, nTasks, dependTaskList); 
 					}
-    				iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, false);
+					err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, false);
+					if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
 					delete[] dependTaskList;
 				}
 				(*asyncTaskMap)[async] = task;
@@ -1190,7 +1316,12 @@ void IrisDriver::HI_tempFree( void* tempPtr, acc_device_t devType, int threadID)
   		int err;
   		if( tempPtr != 0 ) {
 			//We do not free the device memory; instead put it in the memory pool 
-			memPool_t *memPool = memPoolMap[tconf->threadID];
+			memPool_t *memPool = NULL;
+			if( openarcrt_iris_dmem == 1 ) {
+				memPool = tempMemPoolMap[tconf->threadID];
+			} else {
+				memPool = memPoolMap[tconf->threadID];
+			}
 			sizemap_t *tempMallocSize = tempMallocSizeMap[tconf->threadID];
 #if VICTIM_CACHE_MODE > 0
 			if( tempMallocSize->count((const void *)tempPtr) > 0 ) {
@@ -1203,7 +1334,7 @@ void IrisDriver::HI_tempFree( void* tempPtr, acc_device_t devType, int threadID)
 			{
     			HI_device_mem_handle_t tHandle;
     			if( HI_get_device_mem_handle(tempPtr, &tHandle, tconf->threadID) == HI_success ) { 
-      				err = iris_mem_release((iris_mem) tHandle.basePtr);
+      				err = iris_mem_release((iris_mem) tHandle.memHandle);
       				if (err != IRIS_SUCCESS) fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err);
       				free(tempPtr);
       				HI_remove_device_mem_handle(tempPtr, tconf->threadID);
@@ -1271,7 +1402,12 @@ void IrisDriver::HI_tempMalloc1D( void** tempPtr, size_t count, acc_device_t dev
     devType == acc_device_current) {
         sizemap_t *tempMallocSize = tempMallocSizeMap[tconf->threadID];
 #if VICTIM_CACHE_MODE > 0
-        memPool_t *memPool = memPoolMap[tconf->threadID];
+        memPool_t *memPool = NULL;
+		if( openarcrt_iris_dmem == 1 ) {
+        	memPool = tempMemPoolMap[tconf->threadID];
+		} else {
+        	memPool = memPoolMap[tconf->threadID];
+		}
         std::multimap<size_t, void *>::iterator it = memPool->find(count);
         if (it != memPool->end()) {
 #ifdef _OPENARC_PROFILE_
@@ -1288,7 +1424,7 @@ void IrisDriver::HI_tempMalloc1D( void** tempPtr, size_t count, acc_device_t dev
 #endif
 		{
 			int err;
-			void * memHandle;
+			iris_mem memHandle;
 #if VICTIM_CACHE_MODE > 0
 			if( current_mempool_size > tconf->max_mempool_size ) {
 #ifdef _OPENARC_PROFILE_
@@ -1301,7 +1437,7 @@ void IrisDriver::HI_tempMalloc1D( void** tempPtr, size_t count, acc_device_t dev
                 for (it = memPool->begin(); it != memPool->end(); ++it) {
 					tDevPtr = it->second;
     				if( HI_get_device_mem_handle(tDevPtr, &tHandle, tconf->threadID) == HI_success ) { 
-      					err = iris_mem_release((iris_mem) tHandle.basePtr);
+      					err = iris_mem_release((iris_mem) tHandle.memHandle);
       					if (err != IRIS_SUCCESS) fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err);
       					HI_remove_device_mem_handle(tDevPtr, tconf->threadID);
       					free(tDevPtr);
@@ -1328,7 +1464,7 @@ void IrisDriver::HI_tempMalloc1D( void** tempPtr, size_t count, acc_device_t dev
                 for (it = memPool->begin(); it != memPool->end(); ++it) {
 					tDevPtr = it->second;
     				if( HI_get_device_mem_handle(tDevPtr, &tHandle, tconf->threadID) == HI_success ) { 
-      					err = iris_mem_release((iris_mem) tHandle.basePtr);
+      					err = iris_mem_release((iris_mem) tHandle.memHandle);
       					if (err != IRIS_SUCCESS) fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err);
       					HI_remove_device_mem_handle(tDevPtr, tconf->threadID);
       					free(tDevPtr);
@@ -1407,7 +1543,12 @@ void IrisDriver::HI_tempMalloc1D_async( void** tempPtr, size_t count, acc_device
     devType == acc_device_current) {
         sizemap_t *tempMallocSize = tempMallocSizeMap[tconf->threadID];
 #if VICTIM_CACHE_MODE > 0
-        memPool_t *memPool = memPoolMap[tconf->threadID];
+        memPool_t *memPool = NULL;
+		if( openarcrt_iris_dmem == 1 ) {
+        	memPool = tempMemPoolMap[tconf->threadID];
+		} else {
+        	memPool = memPoolMap[tconf->threadID];
+		}
         std::multimap<size_t, void *>::iterator it = memPool->find(count);
         if (it != memPool->end()) {
 #ifdef _OPENARC_PROFILE_
@@ -1424,12 +1565,12 @@ void IrisDriver::HI_tempMalloc1D_async( void** tempPtr, size_t count, acc_device
 #endif
 		{
 			int err;
-			void * memHandle;
+			iris_mem memHandle;
 #if VICTIM_CACHE_MODE > 0
 			if( current_mempool_size > tconf->max_mempool_size ) {
 #ifdef _OPENARC_PROFILE_
                 if( HI_openarcrt_verbosity > 2 ) {
-                    fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_malloc1D_async(%lu) releases memories in the memPool\n", count);
+                    fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_tempMalloc1D_async(%lu) releases memories in the memPool\n", count);
                 }
 #endif
     			HI_device_mem_handle_t tHandle;
@@ -1437,7 +1578,7 @@ void IrisDriver::HI_tempMalloc1D_async( void** tempPtr, size_t count, acc_device
                 for (it = memPool->begin(); it != memPool->end(); ++it) {
 					tDevPtr = it->second;
     				if( HI_get_device_mem_handle(tDevPtr, &tHandle, tconf->threadID) == HI_success ) { 
-      					err = iris_mem_release((iris_mem) tHandle.basePtr);
+      					err = iris_mem_release((iris_mem) tHandle.memHandle);
       					if (err != IRIS_SUCCESS) fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err);
       					HI_remove_device_mem_handle(tDevPtr, tconf->threadID);
       					free(tDevPtr);
@@ -1456,7 +1597,7 @@ void IrisDriver::HI_tempMalloc1D_async( void** tempPtr, size_t count, acc_device
 			if (err != IRIS_SUCCESS) {
 #ifdef _OPENARC_PROFILE_
                 if( HI_openarcrt_verbosity > 2 ) {
-                    fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_malloc1D_async(%lu) releases memories in the memPool\n", count);
+                    fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_tempMalloc1D_async(%lu) releases memories in the memPool\n", count);
                 }
 #endif
     			HI_device_mem_handle_t tHandle;
@@ -1464,7 +1605,7 @@ void IrisDriver::HI_tempMalloc1D_async( void** tempPtr, size_t count, acc_device
                 for (it = memPool->begin(); it != memPool->end(); ++it) {
 					tDevPtr = it->second;
     				if( HI_get_device_mem_handle(tDevPtr, &tHandle, tconf->threadID) == HI_success ) { 
-      					err = iris_mem_release((iris_mem) tHandle.basePtr);
+      					err = iris_mem_release((iris_mem) tHandle.memHandle);
       					if (err != IRIS_SUCCESS) fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err);
       					HI_remove_device_mem_handle(tDevPtr, tconf->threadID);
       					free(tDevPtr);
@@ -1639,10 +1780,10 @@ int IrisDriver::HI_get_num_devices_init(acc_device_t devType, int threadID) {
 		openarcrt_iris_policy = iris_profile;
 	} else if( strcmp(envVar, iris_policy_random) == 0 ) {
 		openarcrt_iris_policy = iris_random;
-	} else if( strcmp(envVar, iris_policy_any) == 0 ) {
-		openarcrt_iris_policy = iris_any;
-	} else if( strcmp(envVar, iris_policy_all) == 0 ) {
-		openarcrt_iris_policy = iris_all;
+	} else if( strcmp(envVar, iris_policy_sdq) == 0 ) {
+		openarcrt_iris_policy = iris_sdq;
+	} else if( strcmp(envVar, iris_policy_ftf) == 0 ) {
+		openarcrt_iris_policy = iris_ftf;
 	} else if( strcmp(envVar, iris_policy_custom) == 0 ) {
 		openarcrt_iris_policy = iris_custom;
 	} else {
@@ -1655,6 +1796,18 @@ int IrisDriver::HI_get_num_devices_init(acc_device_t devType, int threadID) {
     }
 #endif
   }
+  //Set IRIS DMEM setting.
+  envVar = getenv(openarcrt_iris_dmem_env);
+  if( envVar == NULL ) {
+	openarcrt_iris_dmem = 1;
+  } else {
+    openarcrt_iris_dmem = atoi(envVar);
+  }
+#ifdef _OPENARC_PROFILE_
+    if( HI_openarcrt_verbosity >= 0 ) {
+        fprintf(stderr, "[OPENARCRT-INFO]\t\tIRIS DMEM: %d\n", openarcrt_iris_dmem);
+    }
+#endif
 
   int count = 1;
   if (err != IRIS_SUCCESS) { count = 0; }
@@ -1683,8 +1836,10 @@ void IrisDriver::HI_malloc(void **devPtr, size_t size, HI_MallocKind_t flags, in
 #endif
   HostConf_t * tconf = getHostConf(threadID);
   int err;
-  void * memHandle;
+  iris_mem memHandle;
+  //fprintf(stdout, "[IRIS MEM CREATE]\n");
   err = iris_mem_create(size, (iris_mem*) &memHandle);
+
   if (err != IRIS_SUCCESS) fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err);
   *devPtr = malloc(size);
   HI_set_device_mem_handle(*devPtr, memHandle, size, tconf->threadID);
@@ -1722,7 +1877,7 @@ void IrisDriver::HI_free(void *devPtr, int threadID) {
   if( (HI_get_device_address(devPtr, &devPtr2, NULL, &memSize, DEFAULT_QUEUE+tconf->asyncID_offset, tconf->threadID) == HI_error) || (devPtr != devPtr2) ) {
     HI_device_mem_handle_t tHandle;
     if( HI_get_device_mem_handle(devPtr, &tHandle, tconf->threadID) == HI_success ) { 
-      err = iris_mem_release((iris_mem) tHandle.basePtr);
+      err = iris_mem_release((iris_mem) tHandle.memHandle);
       if (err != IRIS_SUCCESS) fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err);
       free(devPtr);
       HI_remove_device_mem_handle(devPtr, tconf->threadID);
@@ -1782,14 +1937,15 @@ HI_error_t IrisDriver::createKernelArgMap(int threadID) {
 	int thread_id = tconf->threadID;
   if (masterHandleTable.count(thread_id) == 0) {
     masterAddressTableMap[thread_id] = new addresstable_t();
-    masterHandleTable[thread_id] = new addressmap_t();
+    masterHandleTable[thread_id] = new memhandlemap_t();
     postponedFreeTableMap[thread_id] = new asyncfreetable_t();
     postponedTempFreeTableMap[thread_id] = new asynctempfreetable_t();
     postponedTempFreeTableMap2[thread_id] = new asynctempfreetable2_t();
     memPoolMap[thread_id] = new memPool_t();
+    tempMemPoolMap[thread_id] = new memPool_t();
     tempMallocSizeMap[thread_id] = new sizemap_t();
   	threadAsyncMap[threadID] = NO_QUEUE;
-  	threadTaskMap[thread_id] = NULL;
+  	//threadTaskMap[thread_id] = NULL;
   	threadTaskMapNesting[thread_id] = 0;
     threadHostMemFreeMap[thread_id] = new pointerset_t();
   }
@@ -1803,34 +1959,43 @@ HI_error_t IrisDriver::createKernelArgMap(int threadID) {
 }
 
 HI_error_t IrisDriver::HI_bind_texref(std::string texName,  HI_datatype_t type, const void *devPtr, size_t size, int threadID) {
+  int err;
   HostConf_t * tconf = getHostConf(threadID);
   HI_device_mem_handle_t tHandle;
   const char* name = texName.c_str();
   int default_async = DEFAULT_QUEUE+tconf->asyncID_offset;
   int currentAsync = threadAsyncMap[threadID];
-  iris_task task = threadTaskMap[threadID];
+  iris_task task;
+  bool task_exist = false;
+  if( threadTaskMap.count(threadID) > 0 ) {
+      task = threadTaskMap[threadID];
+      task_exist = true;
+  }
   int nestingLevel = threadTaskMapNesting[threadID];
   threadtaskmapiris_t *asyncTaskMap = threadAsyncTaskMap[threadID];
   pointerset_t *tmpHostMemSet = threadHostMemFreeMap[threadID];
   if( HI_get_device_mem_handle(devPtr, &tHandle, tconf->threadID) == HI_success ) {
-  	if( (task == NULL) && (nestingLevel == 0) ) {
+  	if( !task_exist && (nestingLevel == 0) ) {
     	iris_task_create(&task);
 	}
     void* tmp = malloc(size);
-    iris_task_h2d(task, (*((iris_mem*) &tHandle)), 0, size, tmp);
+    iris_task_h2d(task, tHandle.memHandle, 0, size, tmp);
   	if( nestingLevel == 0 ) {
 #if IRIS_TASK_SUBMIT_MODE == 0
-    	iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, true);
+		err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, true);
+		if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
     	iris_task_release(task);
 #else
 		if( asyncTaskMap->count(default_async) > 0 ) {
 			iris_task dependTaskList[1] = { asyncTaskMap->at(default_async) };
 			iris_task_depend(task, 1, dependTaskList); 
-    		iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, true);
+			err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, true);
+			if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
 			iris_task_release(dependTaskList[0]);
 			asyncTaskMap->erase(default_async);
 		} else {
-    		iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, true);
+			err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, true);
+			if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
 		}
         iris_task_release(task);
 #endif
@@ -1853,11 +2018,11 @@ HI_error_t IrisDriver::HI_bind_texref(std::string texName,  HI_datatype_t type, 
   if( HI_get_device_mem_handle(devPtr, &tHandle, tconf->threadID) == HI_success ) {
   }
 */
-  void* dptr = (*(void**) &tHandle);
+  iris_mem mHandle = tHandle.memHandle;
 
   size_t name_len = strlen(name) + 1;
   int tp = (type == HI_int) ? iris_int : (type == HI_float) ? iris_float : -1;
-  size_t params_size = sizeof(name_len) + name_len + sizeof(tp) + sizeof(dptr) + sizeof(size);
+  size_t params_size = sizeof(name_len) + name_len + sizeof(tp) + sizeof(mHandle) + sizeof(size);
   char* params = (char*) malloc(params_size);
   int off = 0;
   memcpy(params + off, &name_len, sizeof(name_len));
@@ -1866,8 +2031,8 @@ HI_error_t IrisDriver::HI_bind_texref(std::string texName,  HI_datatype_t type, 
   off += name_len;
   memcpy(params + off, &tp, sizeof(tp));
   off += sizeof(tp);
-  memcpy(params + off, &dptr, sizeof(dptr));
-  off += sizeof(dptr);
+  memcpy(params + off, &mHandle, sizeof(mHandle));
+  off += sizeof(mHandle);
   memcpy(params + off, &size, sizeof(size));
   off += sizeof(size);
 
@@ -1879,17 +2044,20 @@ HI_error_t IrisDriver::HI_bind_texref(std::string texName,  HI_datatype_t type, 
   if( nestingLevel == 0 ) {
     //iris_task_submit(task, iris_default, NULL, true);
 #if IRIS_TASK_SUBMIT_MODE == 0
-    iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, true);
+	err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, true);
+	if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
     iris_task_release(task);
 #else
 	if( asyncTaskMap->count(default_async) > 0 ) {
 		iris_task dependTaskList[1] = { asyncTaskMap->at(default_async) };
 		iris_task_depend(task, 1, dependTaskList); 
-    	iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, true);
+		err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, true);
+		if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
 		iris_task_release(dependTaskList[0]);
 		asyncTaskMap->erase(default_async);
 	} else {
-    	iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, true);
+		err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, true);
+		if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
 	}
     iris_task_release(task);
 #endif
@@ -2345,7 +2513,10 @@ void IrisDriver::HI_enter_subregion(const char *label, int threadID) {
         fprintf(stderr, "[OPENARCRT-INFO]\t\tenter IrisDriver::HI_enter_subregion (label = %s, nestlevel = %d, thread ID = %d)\n", label, nestingLevel, threadID);
     }
 #endif
-  	iris_task task = threadTaskMap[threadID];
+  	iris_task task;
+    if( threadTaskMap.count(threadID) > 0 ) {
+  	    task = threadTaskMap[threadID];
+    }
 	if( nestingLevel == 0 ) {
 #ifdef _OPENARC_PROFILE_
     if( HI_openarcrt_verbosity > 2 ) {
@@ -2371,13 +2542,19 @@ void IrisDriver::HI_exit_subregion(const char *label, int threadID) {
         fprintf(stderr, "[OPENARCRT-INFO]\t\tenter IrisDriver::HI_exit_subregion (label = %s, nestlevel = %d, thread ID = %d)\n", label, nestingLevel, threadID);
     }
 #endif
+	int err;
   	int currentAsync = threadAsyncMap[threadID];
-  	iris_task task = threadTaskMap[threadID];
+  	iris_task task;
+    bool task_exist = false;
+    if( threadTaskMap.count(threadID) > 0 ) {
+  	    task = threadTaskMap[threadID];
+        task_exist = true;
+    }
 	threadtaskmapiris_t *asyncTaskMap = threadAsyncTaskMap[threadID];
     pointerset_t *tmpHostMemSet = threadHostMemFreeMap[threadID];
 	nestingLevel--;
 	if( nestingLevel <= 0 ) {
-		if( task != NULL ) {
+		if( task_exist ) {
 			int memcpy_cmd_option = 0;
 #if OPT_MEMCPY_ONLY_POLICY == 2
 			int d2hmemcpy_cmds_cnt = 0;
@@ -2426,8 +2603,9 @@ void IrisDriver::HI_exit_subregion(const char *label, int threadID) {
     			if( HI_openarcrt_verbosity > 2 ) {
         			fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_exit_subregion (label = %s, nestlevel = %d, thread ID = %d) submits an IRIS task synchronously to the device %d\n", label, nestingLevel, threadID, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option));
     			}
-#endif
-    			iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option), NULL, true);
+#endif			
+				err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option), NULL, true);
+				if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
 #ifdef _OPENARC_PROFILE_
 				tconf->BTaskCnt++;	
 #endif
@@ -2438,11 +2616,13 @@ void IrisDriver::HI_exit_subregion(const char *label, int threadID) {
 					}
 					tmpHostMemSet->clear();
 				}
-  				threadTaskMap[threadID] = NULL;
+  				threadTaskMap.erase(threadID);
   				threadAsyncMap[threadID] = NO_QUEUE;
 				threadTaskMapNesting[threadID] = 0;
 #else
-				if(iris_task_kernel_cmd_only(task) != IRIS_SUCCESS) {
+				//[DEBUG on Sept. 22, 2024] When IRIS DMEM is used, H2D transfers are implicitly handled
+				//and thus, H2D commands are not included in the IRIS task.
+				if((openarcrt_iris_dmem == 1) || (iris_task_kernel_cmd_only(task) != IRIS_SUCCESS)) {
 					if( asyncTaskMap->count(currentAsync) > 0 ) {
 #ifdef _OPENARC_PROFILE_
     					if( HI_openarcrt_verbosity > 2 ) {
@@ -2451,7 +2631,8 @@ void IrisDriver::HI_exit_subregion(const char *label, int threadID) {
 #endif
 						iris_task dependTaskList[1] = { asyncTaskMap->at(currentAsync) };
 						iris_task_depend(task, 1, dependTaskList); 
-    					iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option), NULL, true);
+						err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option), NULL, true);
+						if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
 						iris_task_release(dependTaskList[0]);
 						asyncTaskMap->erase(currentAsync);
 					} else {
@@ -2459,8 +2640,9 @@ void IrisDriver::HI_exit_subregion(const char *label, int threadID) {
     					if( HI_openarcrt_verbosity > 2 ) {
         					fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_exit_subregion (label = %s, nestlevel = %d, thread ID = %d) submits an IRIS task synchronously (async ID = %d) without dependency to the device %d\n", label, nestingLevel, threadID, currentAsync, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option));
     					}
-#endif
-    					iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option), NULL, true);
+#endif					
+						err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option), NULL, true);
+						if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
 					}
 #ifdef _OPENARC_PROFILE_
 					tconf->BTaskCnt++;	
@@ -2472,7 +2654,7 @@ void IrisDriver::HI_exit_subregion(const char *label, int threadID) {
 						}
 						tmpHostMemSet->clear();
 					}
-  					threadTaskMap[threadID] = NULL;
+  					threadTaskMap.erase(threadID);
   					threadAsyncMap[threadID] = NO_QUEUE;
 					threadTaskMapNesting[threadID] = 0;
 				} else {
@@ -2484,7 +2666,8 @@ void IrisDriver::HI_exit_subregion(const char *label, int threadID) {
 #endif
 						iris_task dependTaskList[1] = { asyncTaskMap->at(currentAsync) };
 						iris_task_depend(task, 1, dependTaskList); 
-    					iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option), NULL, false);
+						err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option), NULL, false);
+						if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
 						iris_task_release(dependTaskList[0]);
 						//asyncTaskMap->erase(currentAsync);
 					} else {
@@ -2492,11 +2675,12 @@ void IrisDriver::HI_exit_subregion(const char *label, int threadID) {
     					if( HI_openarcrt_verbosity > 2 ) {
         					fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_exit_subregion (label = %s, nestlevel = %d,thread ID = %d) submits an IRIS task asynchronously (async ID = %d) without dependency to the device %d\n", label, nestingLevel, threadID, currentAsync, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option));
     					}
-#endif
-    					iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option), NULL, false);
+#endif					
+						err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option), NULL, false);
+						if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
 					}
 					(*asyncTaskMap)[currentAsync] = task;
-  					threadTaskMap[threadID] = NULL;
+  					threadTaskMap.erase(threadID);
   					threadAsyncMap[threadID] = NO_QUEUE;
 					threadTaskMapNesting[threadID] = 0;
 #ifdef _OPENARC_PROFILE_
@@ -2513,18 +2697,20 @@ void IrisDriver::HI_exit_subregion(const char *label, int threadID) {
 #endif
 					iris_task dependTaskList[1] = { asyncTaskMap->at(currentAsync) };
 					iris_task_depend(task, 1, dependTaskList); 
-    				iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option), NULL, false);
+					err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option), NULL, false);
+					if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
 					iris_task_release(dependTaskList[0]);
 				} else {
 #ifdef _OPENARC_PROFILE_
     				if( HI_openarcrt_verbosity > 2 ) {
         				fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_exit_subregion (label = %s, nestlevel = %d,thread ID = %d) submits an IRIS task asynchronously (async ID = %d) without dependency to the device %d\n", label, nestingLevel, threadID, currentAsync, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option));
     				}
-#endif
-    				iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option), NULL, false);
+#endif				
+					err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option), NULL, false);
+					if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
 				}
 				(*asyncTaskMap)[currentAsync] = task;
-  				threadTaskMap[threadID] = NULL;
+  				threadTaskMap.erase(threadID);
   				threadAsyncMap[threadID] = NO_QUEUE;
 				threadTaskMapNesting[threadID] = 0;
 #ifdef _OPENARC_PROFILE_

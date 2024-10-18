@@ -6,6 +6,7 @@ import openacc.analysis.AnalysisTools;
 import openacc.analysis.SubArray;
 import openacc.hir.ACCAnnotation;
 import openacc.hir.ARCAnnotation;
+import openacc.hir.CUDASpecifier;
 import openacc.hir.KernelFunctionCall;
 import openacc.hir.OpenCLSpecifier;
 import openacc.hir.ReductionOperator;
@@ -1124,6 +1125,9 @@ public abstract class OpenCLTranslationTools {
                 removeSpecs.add(Specifier.STATIC);
                 removeSpecs.add(Specifier.CONST);
                 removeSpecs.add(Specifier.EXTERN);
+                //[FIXME on March 27, 2024] If OPENARC_ARCH = 6, CUDASpecifier.CUDA_SHARED added in the first ACC2CUDATranslator pass
+                //may remain due to a reduction transformation error; as a temporary fix, delete it if existing.
+                removeSpecs.add(CUDASpecifier.CUDA_SHARED);
                 boolean gangPrivCachingOnShared = false;
                 boolean workerPrivCachingOnShared = false;
                 boolean workerPrivOnGlobal = false;
@@ -2277,6 +2281,11 @@ public abstract class OpenCLTranslationTools {
             ArraySpecifier easpec = new ArraySpecifier(edimensions);
             arrayV_declarator = new VariableDeclarator(new NameID(symName), easpec);
             typeSpecs.add(0, OpenCLSpecifier.OPENCL_GLOBAL);
+    		//[FIXME on March 27, 2024] If OPENARC_ARCH = 6, CUDASpecifier.CUDA_SHARED added in the first ACC2CUDATranslator pass
+    		//may remain due to a reduction transformation error; as a temporary fix, delete it if existing.
+    		if( typeSpecs.contains(CUDASpecifier.CUDA_SHARED) ) {
+    			typeSpecs.remove(CUDASpecifier.CUDA_SHARED);
+    		}
 			arrayV_decl =
                     new VariableDeclaration(typeSpecs, arrayV_declarator);
             array_var = new Identifier(arrayV_declarator);
@@ -2455,6 +2464,11 @@ public abstract class OpenCLTranslationTools {
         eTypeSpecs.addAll(typeSpecs);
 		if( !eTypeSpecs.contains(OpenCLSpecifier.OPENCL_LOCAL) ) {
 			eTypeSpecs.add(0, OpenCLSpecifier.OPENCL_LOCAL);
+		}
+		//[FIXME on March 27, 2024] If OPENARC_ARCH = 6, CUDASpecifier.CUDA_SHARED added in the first ACC2CUDATranslator pass
+		//may remain due to a reduction transformation error; as a temporary fix, delete it if existing.
+		if( eTypeSpecs.contains(CUDASpecifier.CUDA_SHARED) ) {
+			eTypeSpecs.remove(CUDASpecifier.CUDA_SHARED);
 		}
         VariableDeclaration arrayV_decl =
                 new VariableDeclaration(eTypeSpecs, arrayV_declarator);

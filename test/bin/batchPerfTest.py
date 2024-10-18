@@ -4,7 +4,7 @@ import subprocess
 import shlex
 
 #Set the number of executions for each benchmark.
-NUM_REPEATS=10
+NUM_REPEATS=1
 
 OPENARC=os.getenv('openarc')
 #print("openarc env = %s" % (OPENARC))
@@ -22,7 +22,7 @@ if RODINIA == None :
 WORKDIR=os.path.dirname(os.path.abspath(__file__))
 #print("[INFO] Current working directory: %s" % (WORKDIR))
 
-TEST_TARGETS=[["jacobi","/test/benchmarks/openacc/kernels/jacobi","O2GBuild.script 32768","make","jacobi_ACC"," "],
+TEST_TARGETS=[["jacobi","/test/benchmarks/openacc/kernels/jacobi","O2GBuild.script 16384","make","jacobi_ACC"," "],
         ["laplace2d","/test/benchmarks/openacc/kernels/laplace2d","O2GBuild.script","make","laplace2d_ACC", " "],
         ["mandelbrot","/test/benchmarks/openacc/kernels/mandelbrot","O2GBuild.script 16384","make","mandelbrot_ACC", " "],
         ["matmul","/test/benchmarks/openacc/kernels/matmul","O2GBuild.script 16384","make","matmul_ACC", " "],
@@ -41,11 +41,11 @@ TEST_TARGETS=[["jacobi","/test/benchmarks/openacc/kernels/jacobi","O2GBuild.scri
         ["hotspot","/test/benchmarks/openacc/rodinia/hotspot","O2GBuild.script 1024","make ROW_SIZE=1024 COL_SIZE=1024","hotspot_ACC", "1024 1024 100 1 " + RODINIA + "/data/hotspot/temp_1024 " + RODINIA + "/data/hotspot/power_1024 hpoutput_1024.txt"],
         ["kmeans","/test/benchmarks/openacc/rodinia/kmeans","O2GBuild.script 5 34 204800 1","make _NCLUSTERS=5 _NATTRIBUTES=34 _NPOINTS=204800 _UNROLLFAC=1","kmeans_ACC", "-i " + RODINIA + "/data/kmeans/204800.txt"],
         ["lud","/test/benchmarks/openacc/rodinia/lud","O2GBuild.script 4194304","make","lud_ACC", "-v -i " + RODINIA + "/data/lud/2048.dat"],
-        ["nw","/test/benchmarks/openacc/rodinia/nw","O2GBuild.script 32769","make","nw_ACC", "32768 10 1"],
+        ["nw","/test/benchmarks/openacc/rodinia/nw","O2GBuild.script 16385","make","nw_ACC", "16384 10 1"],
         ["srad","/test/benchmarks/openacc/rodinia/srad","O2GBuild.script 8192 0","make","srad_ACC", "8192 8192 0 127 0 127 1 0.5 100"],
         ["epcc","/test/benchmarks/openacc/epcc","O2GBuild.script 67108864","make","epcc_ACC", "--reps 3 --datasize 67108864"],
-        ["lulesh","/test/benchmarks/openacc/lulesh","O2GBuild.script","make","lulesh_ACC", "-s 100"],
-        ["spec-xsbench","/test/benchmarks/openacc/xsbench","O2GBuild.script","make","xsbench_ACC", " "],
+        ["lulesh","/test/benchmarks/openacc/lulesh","O2GBuild.script","make","lulesh_ACC", "-s 100 -i 1000"],
+        ["spec-xsbench","/test/benchmarks/openacc/xsbench","O2GBuild.script","make","xsbench_ACC", "-s small -l 100000000"],
         ["spec-ostencil","/test/benchmarks/openacc/specaccel1.1/303.ostencil/src","O2GBuild.script","make","ostencil_ACC", "512 512 98 20000"],
         ["spec-olbm","/test/benchmarks/openacc/specaccel1.1/304.olbm/src","O2GBuild.script ref","make","lbm_ACC", "5000 reference.dat 0 0 100_100_130_ldc.of"],
         ["spec-omriq","/test/benchmarks/openacc/specaccel1.1/314.omriq/src","O2GBuild.script ref","make","mriq_ACC", "-i ../../data/ref/128x128x128.bin -o 128x128x128.out 200000"],

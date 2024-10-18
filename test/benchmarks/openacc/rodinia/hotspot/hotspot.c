@@ -6,6 +6,11 @@
 #include <sys/time.h>
 #include <math.h>
 //using namespace std;
+
+#ifndef _DTYPE
+    #define _DTYPE double
+#endif
+
 #define STR_SIZE	256
 
 #ifndef VERIFICATION
@@ -64,11 +69,11 @@
 #endif
 
 /* chip parameters	*/
-double t_chip = 0.0005F;
-double chip_height = 0.016F;
-double chip_width = 0.016F;
+_DTYPE t_chip = 0.0005F;
+_DTYPE chip_height = 0.016F;
+_DTYPE chip_width = 0.016F;
 /* ambient temperature, assuming no package at all	*/
-double amb_temp = 80.0F;
+_DTYPE amb_temp = 80.0F;
 
 int num_omp_threads;
 
@@ -83,7 +88,7 @@ double gettime() {
  * transfer differential equations to difference equations 
  * and solves the difference equations by iterating
  */
-void compute_tran_temp(double *result, int num_iterations, double *temp, double *power, int row, int col) 
+void compute_tran_temp(_DTYPE *result, int num_iterations, _DTYPE *temp, _DTYPE *power, int row, int col) 
 {
 #ifdef VERBOSE
 		int i = 0;
@@ -95,21 +100,21 @@ void compute_tran_temp(double *result, int num_iterations, double *temp, double 
 		double start_time, end_time;
 #endif
 
-		double grid_height = chip_height / row;
-		double grid_width = chip_width / col;
+		_DTYPE grid_height = chip_height / row;
+		_DTYPE grid_width = chip_width / col;
 
-		double Cap = FACTOR_CHIP * SPEC_HEAT_SI * t_chip * grid_width * grid_height;
-		double Rx = grid_width / (2.0F * K_SI * t_chip * grid_height);
-		double Ry = grid_height / (2.0F * K_SI * t_chip * grid_width);
-		double Rz = t_chip / (K_SI * grid_height * grid_width);
+		_DTYPE Cap = FACTOR_CHIP * SPEC_HEAT_SI * t_chip * grid_width * grid_height;
+		_DTYPE Rx = grid_width / (2.0F * K_SI * t_chip * grid_height);
+		_DTYPE Ry = grid_height / (2.0F * K_SI * t_chip * grid_width);
+		_DTYPE Rz = t_chip / (K_SI * grid_height * grid_width);
 
-		double max_slope = MAX_PD / (FACTOR_CHIP * t_chip * SPEC_HEAT_SI);
-		double step = PRECISION / max_slope;
+		_DTYPE max_slope = MAX_PD / (FACTOR_CHIP * t_chip * SPEC_HEAT_SI);
+		_DTYPE step = PRECISION / max_slope;
 
 		//////////////////////////////////////////////
 		// Added for inlining of single_iteration() //
 		//////////////////////////////////////////////
-		double delta;
+		_DTYPE delta;
 		int r, c;
 		int rc;
 
@@ -219,7 +224,7 @@ void compute_tran_temp(double *result, int num_iterations, double *temp, double 
 }
 
 
-void compute_tran_temp_CPU(double *result, int num_iterations, double *temp, double *power, int row, int col) 
+void compute_tran_temp_CPU(_DTYPE *result, int num_iterations, _DTYPE *temp, _DTYPE *power, int row, int col) 
 {
 #ifdef VERBOSE
 		int i = 0;
@@ -231,21 +236,21 @@ void compute_tran_temp_CPU(double *result, int num_iterations, double *temp, dou
 		double start_time, end_time;
 #endif
 
-		double grid_height = chip_height / row;
-		double grid_width = chip_width / col;
+		_DTYPE grid_height = chip_height / row;
+		_DTYPE grid_width = chip_width / col;
 
-		double Cap = FACTOR_CHIP * SPEC_HEAT_SI * t_chip * grid_width * grid_height;
-		double Rx = grid_width / (2.0F * K_SI * t_chip * grid_height);
-		double Ry = grid_height / (2.0F * K_SI * t_chip * grid_width);
-		double Rz = t_chip / (K_SI * grid_height * grid_width);
+		_DTYPE Cap = FACTOR_CHIP * SPEC_HEAT_SI * t_chip * grid_width * grid_height;
+		_DTYPE Rx = grid_width / (2.0F * K_SI * t_chip * grid_height);
+		_DTYPE Ry = grid_height / (2.0F * K_SI * t_chip * grid_width);
+		_DTYPE Rz = t_chip / (K_SI * grid_height * grid_width);
 
-		double max_slope = MAX_PD / (FACTOR_CHIP * t_chip * SPEC_HEAT_SI);
-		double step = PRECISION / max_slope;
+		_DTYPE max_slope = MAX_PD / (FACTOR_CHIP * t_chip * SPEC_HEAT_SI);
+		_DTYPE step = PRECISION / max_slope;
 
 		//////////////////////////////////////////////
 		// Added for inlining of single_iteration() //
 		//////////////////////////////////////////////
-		double delta;
+		_DTYPE delta;
 		int r, c;
 		int rc;
 
@@ -346,7 +351,7 @@ void fatal(char *s)
 		exit(1);
 }
 
-void writeoutput(double *vect, int grid_rows, int grid_cols, char *file){
+void writeoutput(_DTYPE *vect, int grid_rows, int grid_cols, char *file){
 
 		int i,j, index=0;
 		FILE *fp;
@@ -369,12 +374,12 @@ void writeoutput(double *vect, int grid_rows, int grid_cols, char *file){
 }
 
 
-void read_input(double *vect, int grid_rows, int grid_cols, char *file)
+void read_input(_DTYPE *vect, int grid_rows, int grid_cols, char *file)
 {
 		int i, index;
 		FILE *fp;
 		char str[STR_SIZE];
-		double val;
+		_DTYPE val;
 
 		fp = fopen (file, "r");
 		if (!fp)
@@ -409,7 +414,7 @@ void usage(int argc, char **argv)
 int main(int argc, char **argv)
 {
 		int grid_rows, grid_cols, sim_time, i;
-		double *temp, *power, *result;
+		_DTYPE *temp, *power, *result;
 		char *tfile, *pfile, *ofile;
 
 		double start_time, end_time;
@@ -427,9 +432,9 @@ int main(int argc, char **argv)
 		start_time = gettime();
 
 		/* allocate memory for the temperature and power arrays	*/
-		temp = (double *) calloc (grid_rows * grid_cols, sizeof(double));
-		power = (double *) calloc (grid_rows * grid_cols, sizeof(double));
-		result = (double *) calloc (grid_rows * grid_cols, sizeof(double));
+		temp = (_DTYPE *) calloc (grid_rows * grid_cols, sizeof(_DTYPE));
+		power = (_DTYPE *) calloc (grid_rows * grid_cols, sizeof(_DTYPE));
+		result = (_DTYPE *) calloc (grid_rows * grid_cols, sizeof(_DTYPE));
 		if(!temp || !power)
 				fatal((char *)"unable to allocate memory");
 
@@ -456,14 +461,14 @@ int main(int argc, char **argv)
 		writeoutput(temp, grid_rows, grid_cols, ofile);
 
 		if(VERIFICATION) {
-			double *tempCPU, *powerCPU, *resultCPU;
+			_DTYPE *tempCPU, *powerCPU, *resultCPU;
 			double deltaL2Norm = 0;
 		  double nonAccL2Norm = 0;
 			double L2Norm;
 
-			tempCPU = (double *) calloc (grid_rows * grid_cols, sizeof(double));
-			powerCPU = (double *) calloc (grid_rows * grid_cols, sizeof(double));
-			resultCPU = (double *) calloc (grid_rows * grid_cols, sizeof(double));
+			tempCPU = (_DTYPE *) calloc (grid_rows * grid_cols, sizeof(_DTYPE));
+			powerCPU = (_DTYPE *) calloc (grid_rows * grid_cols, sizeof(_DTYPE));
+			resultCPU = (_DTYPE *) calloc (grid_rows * grid_cols, sizeof(_DTYPE));
 		
 			read_input(tempCPU, grid_rows, grid_cols, tfile);
 			read_input(powerCPU, grid_rows, grid_cols, pfile);
@@ -474,7 +479,7 @@ int main(int argc, char **argv)
 
 			
 		  for (i = 0; i < grid_rows * grid_cols; ++i) {
-		      double d = tempCPU[i] - temp[i];
+		      _DTYPE d = tempCPU[i] - temp[i];
 			  //printf("CPU temp[%d] = %g, GPU temp[%d] = %g\n", i, tempCPU[i], i, temp[i]);
 		      deltaL2Norm += d * d;
 		      nonAccL2Norm += tempCPU[i] * tempCPU[i];

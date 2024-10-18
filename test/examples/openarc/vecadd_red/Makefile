@@ -3,19 +3,19 @@ include ../../../../make.header
 ########################
 # Set the program name #
 ########################
-BENCHMARK = jacobi
+BENCHMARK = vecadd_red
 
 ########################################
 # Set the input C source files (CSRCS) #
 ########################################
-CSRCS = jacobi.c
+CSRCS = vecadd_red.c
 
 #########################################
 # Set macros used for the input program #
 #########################################
-ASIZE ?= 128
-DEFSET_CPU = -DASIZE=$(ASIZE)
-#DEFSET_ACC = -DASIZE=$(ASIZE)
+#_N_ ?= 512
+#DEFSET_CPU = -D_N_=$(_N_)
+#DEFSET_ACC = -D_N_=$(_N_)
 
 #########################################################
 # Makefile options that the user can overwrite          #

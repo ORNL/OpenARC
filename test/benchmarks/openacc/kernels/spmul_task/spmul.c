@@ -21,43 +21,43 @@ extern double timer_();
 #define ITER	100
 /*
 #define INPUTFILE	"af23560.ruaC"
-#define SIZE	23560
-#define SIZE2	23560 //debugging purpose (should be replaced with SIZE)
+#define ASIZE	23560
+#define ASIZE2	23560 //debugging purpose (should be replaced with ASIZE)
 #define NZR		484256
 */
 /*
 #define INPUTFILE	"rajat31.rbC"
-#define SIZE	4690002
-#define SIZE2	4690002 //debugging purpose (should be replaced with SIZE)
+#define ASIZE	4690002
+#define ASIZE2	4690002 //debugging purpose (should be replaced with ASIZE)
 #define NZR		20316253
 
 #define INPUTFILE	"af_shell10.rbC"
-#define SIZE	1508065
-#define SIZE2	1508065 //debugging purpose (should be replaced with SIZE)
+#define ASIZE	1508065
+#define ASIZE2	1508065 //debugging purpose (should be replaced with ASIZE)
 #define NZR		27090195
 */
 
 /*
 #define INPUTFILE   "hood.rbC"
-#define SIZE    220542  
-#define SIZE2   220542  
+#define ASIZE    220542  
+#define ASIZE2   220542  
 #define NZR 5494489 
 */
 
 #define INPUTFILE	"kkt_power.rbC"
-#define SIZE	2063494
-#define SIZE2	2063494 //debugging purpose (should be replaced with SIZE)
+#define ASIZE	2063494
+#define ASIZE2	2063494 //debugging purpose (should be replaced with ASIZE)
 #define NZR		8130343
 #ifdef _OPENARC_
-#pragma openarc #define SIZE	2063494
-#pragma openarc #define SIZE2	2063494 //debugging purpose (should be replaced with SIZE)
+#pragma openarc #define ASIZE	2063494
+#pragma openarc #define ASIZE2	2063494 //debugging purpose (should be replaced with ASIZE)
 #pragma openarc #define NZR		8130343
 #endif
 /*
 #define ITER	500
 #define INPUTFILE	"msdoor.rbC"
-#define SIZE	415863
-#define SIZE2	415863 
+#define ASIZE	415863
+#define ASIZE2	415863 
 #define NZR		10328399
 */
 
@@ -65,93 +65,93 @@ extern double timer_();
 #define INPUTFILE	"appu.rbC"
 //#define INPUTFILE	"appu.rbCR"
 //#define INPUTFILE	"appu.rbCRP"
-#define SIZE	14000
-#define SIZE2	14000 
+#define ASIZE	14000
+#define ASIZE2	14000 
 #define NZR		1853104
 //#define NZR		1857600
 */
 
 /*
 #define INPUTFILE	"nd24k.rbC"
-#define SIZE	72000
-#define SIZE2	72000 
+#define ASIZE	72000
+#define ASIZE2	72000 
 #define NZR		14393817
 
 //#define INPUTFILE	"F1.rbC"
 #define INPUTFILE	"F1.rbCRP"
-#define SIZE	343791
-#define SIZE2	343791 
+#define ASIZE	343791
+#define ASIZE2	343791 
 //#define NZR		13590452
 #define NZR		13596431
 
 //#define INPUTFILE	"ASIC_680k.rbC"
 #define INPUTFILE	"ASIC_680k.rbCR"
-#define SIZE	682862
-#define SIZE2	682862
+#define ASIZE	682862
+#define ASIZE2	682862
 #define NZR		3871773
 
 #define INPUTFILE	"ASIC_680ks.rbC"
-#define SIZE	682712
-#define SIZE2	682712 
+#define ASIZE	682712
+#define ASIZE2	682712 
 #define NZR		2329176
 
 #define INPUTFILE	"crankseg_2.rbC"
-#define SIZE	63838
-#define SIZE2	63838 
+#define ASIZE	63838
+#define ASIZE2	63838 
 #define NZR		7106348
 
 #define INPUTFILE	"darcy003.rbC"
-#define SIZE	389874
-#define SIZE2	389874 
+#define ASIZE	389874
+#define ASIZE2	389874 
 #define NZR		1167685
 
 #define INPUTFILE	"Si41Ge41H72.rbC"
-#define SIZE	185639
-#define SIZE2	185639 
+#define ASIZE	185639
+#define ASIZE2	185639 
 #define NZR		7598452
 
 #define INPUTFILE	"SiO2.rbC"
-#define SIZE	155331
-#define SIZE2	155331 
+#define ASIZE	155331
+#define ASIZE2	155331 
 #define NZR		5719417
 */
 /*
 #define INPUTFILE   "sparsine.rbCR"
-#define SIZE    50000
-#define SIZE2   50000
+#define ASIZE    50000
+#define ASIZE2   50000
 #define NZR 799494
 
 #define INPUTFILE   "sparsine.rbCRPF"
-#define SIZE    50000   
-#define SIZE2   50000   
+#define ASIZE    50000   
+#define ASIZE2   50000   
 #define NZR 3200000 
 */
 /*
 #define INPUTFILE   "ns3Da.rbCRPF"
-#define SIZE    20414   
-#define SIZE2   20414   
+#define ASIZE    20414   
+#define ASIZE2   20414   
 #define NZR 6533120 
 */
 
 /*
 #define INPUTFILE   "af23560.rand51M"
-#define SIZE    100000  
-#define SIZE2   100000
+#define ASIZE    100000  
+#define ASIZE2   100000
 #define NZR 6400000
 */
 
 /*
 #define INPUTFILE   "af23560.rand200M"
-#define SIZE    100000  
-#define SIZE2   100000
+#define ASIZE    100000  
+#define ASIZE2   100000
 #define NZR 25600000
 */
 
 int colind[NZR];
-int rowptr[SIZE+1];
+int rowptr[ASIZE+1];
 float values[NZR];
-float x[SIZE];
-float y[SIZE];
+float x[ASIZE];
+float y[ASIZE];
 
 int main() {
 	FILE *fp10;
@@ -189,11 +189,11 @@ int main() {
 	printf("FILE open done\n");
 
 	fscanf(fp10, "%d %d %d", &r_nrow, &r_ncol, &r_nnzero);
-	if (r_nrow != SIZE) {
+	if (r_nrow != ASIZE) {
 		printf("alarm: incorrect row\n");
 		exit(1);
 	}
-	if (r_ncol != SIZE) {
+	if (r_ncol != ASIZE) {
 		printf("alarm: incorrect col\n");
 		exit(1);
 	}
@@ -201,7 +201,7 @@ int main() {
 		printf("alarm: incorrect nzero\n");
 		exit(1);
 	}
-	for( i=0; i<=SIZE; i++ ) {
+	for( i=0; i<=ASIZE; i++ ) {
 		fscanf(fp10, "%d", (rowptr+i));
 	}
 
@@ -215,7 +215,7 @@ int main() {
 	fclose(fp10);
 
 	j = 0;
-    for( i=0; i<SIZE; i++ ) {
+    for( i=0; i<ASIZE; i++ ) {
 LB99:
 		temp = values[j];
 		if( ((-0.1f) < temp)&&(temp < 0.1f) ) {
@@ -251,13 +251,13 @@ LB99:
 
 #ifdef DEBUG_ON1
 	x_sum = 0.0f;
-	for( i=0; i<SIZE; i++ ) {
+	for( i=0; i<ASIZE; i++ ) {
 		x_sum += x[i];
 	}
 	printf("0: x_sum = %.12E\n", x_sum);
 #endif
-	cpumemsize += sizeof(int) * (NZR + SIZE + 1);
-	cpumemsize += sizeof(float) * (NZR + 2*SIZE);
+	cpumemsize += sizeof(int) * (NZR + ASIZE + 1);
+	cpumemsize += sizeof(float) * (NZR + 2*ASIZE);
 	printf("Used CPU memory: %d bytes\n", cpumemsize);
 
 	printf("initialization done\n");
@@ -274,11 +274,11 @@ LB99:
 // exp0 and j should be explicitly declased as private.               //
 // i will be private automatically, but added in private list         //
 ////////////////////////////////////////////////////////////////////////
-#pragma acc data copy(x[0:SIZE]), copyin(values[0:NZR], colind[0:NZR], rowptr[0:SIZE+1]), create(y[0:SIZE])
+#pragma acc data copy(x[0:ASIZE]), copyin(values[0:NZR], colind[0:NZR], rowptr[0:ASIZE+1]), create(y[0:ASIZE])
 	for( k=0; k<ITER; k++ ) {
 #pragma unroll 32 
 #pragma acc parallel loop seq
-        for( i=0; i<SIZE2; i++ ) { 
+        for( i=0; i<ASIZE2; i++ ) { 
             y[i] = 0.0f;
             for( j=0; j<(rowptr[1+i]-rowptr[i]); j++ ) { 
                 y[i] = y[i] + values[rowptr[i]+j-1]*x[colind[rowptr[i]+j-1]-1];
@@ -293,7 +293,7 @@ LB99:
 /////////////////////////////////////////////////////////////////////
 #pragma unroll 32
 #pragma acc parallel loop seq private(exp0)
-		for( i=0; i<SIZE2; i++ ) {
+		for( i=0; i<ASIZE2; i++ ) {
 			float tmp = y[i];
 			x[i] = tmp;
 			if( tmp != 0.0f ) {
@@ -326,14 +326,14 @@ LB99:
 
 #ifdef DEBUG_ON2
 	x_sum = 0.0f;
-	for( i=0; i<SIZE2; i++ ) {
+	for( i=0; i<ASIZE2; i++ ) {
 		x_sum += x[i];
 	}
 	printf("%d: x_sum = %.12E\n",(k+1), x_sum);
 #endif
 
 /*
-	for( i=0; i< SIZE; i++ ) {
+	for( i=0; i< ASIZE; i++ ) {
 		fprintf(fp12, "%.9E\n", x[i]);
 	} 
 

@@ -2,33 +2,6 @@
 
 #define __OPENARC_EXT_HEADER__
 
-#if defined(OPENARC_ARCH) && OPENARC_ARCH == 5
-#include <hip/hip_runtime.h>
-#endif
-
-#if defined(OPENARC_ARCH) && OPENARC_ARCH == 6
-#if defined(OPENARCRT_USE_BRISBANE) && OPENARCRT_USE_BRISBANE == 1
-#include <brisbane/brisbane_runtime.h>
-#elif defined(OPENARCRT_USE_BRISBANE) && OPENARCRT_USE_BRISBANE == 2
-#include <iris/brisbane_runtime.h>
-#else
-#include <iris/iris_runtime.h>
-#endif
-#endif
-
-#if !defined(OPENARC_ARCH) || OPENARC_ARCH == 0
-#include <cuda_runtime.h>
-#include <cuda.h>
-#endif
-
-#if defined(OPENARC_ARCH) && OPENARC_ARCH != 0 && OPENARC_ARCH != 5 && OPENARC_ARCH != 6
-#ifdef __APPLE__
-#include <OpenCL/opencl.h>
-#else
-#include <CL/cl.h>
-#endif
-#endif
-
 #include "openaccrt.h"
 
 #define PRINT_TODO
@@ -76,6 +49,13 @@ typedef struct
 	int* kernelParamsInfo;
 #if defined(OPENARC_ARCH) && OPENARC_ARCH != 0 && OPENARC_ARCH != 5 && OPENARC_ARCH != 6
 	cl_mem* kernelParamSubBuffers;
+#endif
+#if defined(OPENARC_ARCH) && OPENARC_ARCH == 6
+#if defined(OPENARCRT_USE_BRISBANE) && OPENARCRT_USE_BRISBANE == 1
+    brisbane_mem* kernelParamMems;
+#else
+    iris_mem* kernelParamMems;
+#endif
 #endif
 } kernelParams_t;
 
@@ -322,7 +302,12 @@ public:
 	static std::vector<int> FPGADeviceIDs;
 	static std::vector<int> PhiDeviceIDs;
 	static std::vector<int> DefaultDeviceIDs;
+#if defined(OPENARCRT_USE_BRISBANE) && OPENARCRT_USE_BRISBANE == 1
+	static int openarcrt_brisbane_policy;
+#else
 	static int openarcrt_iris_policy;
+#endif
+	static int openarcrt_iris_dmem;
 
 	//thread to IRIS task mapping table.
 	threadasyncmapiris_t threadAsyncMap;

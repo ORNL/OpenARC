@@ -21,8 +21,8 @@
 
 #define fastcopy(to,from,len)\
 {\
-  register char *_to,*_from;\
-  register int _i,_l;\
+  char *_to,*_from;\
+  int _i,_l;\
   _to = (char *)(to);\
   _from = (char *)(from);\
   _l = (len);\

@@ -474,7 +474,11 @@ HI_error_t OpenCLDriver::init(int threadID) {
         binarySize = ftell(fp);
         rewind(fp);
         unsigned char *programBinary = new unsigned char[binarySize];
-        fread(programBinary, 1, binarySize, fp);
+        size_t readSize = fread(programBinary, 1, binarySize, fp);
+		if( readSize != binarySize ) {
+            fprintf(stderr, "[ERROR in OpenCLDriver::init()] error in reading the program binary!\n");
+			exit(1);
+		}
         fclose(fp);
 
         cl_int binaryStatus;
@@ -565,7 +569,7 @@ HI_error_t OpenCLDriver::init(int threadID) {
     	eventMap[1+thread_id*MAX_NUM_QUEUES_PER_THREAD]= e1;
     	threadQueueEventMap[thread_id] = eventMap;
 		masterAddressTableMap[thread_id] = new addresstable_t();
-		masterHandleTable[thread_id] = new addressmap_t();
+		masterHandleTable[thread_id] = new memhandlemap_t();
 		postponedFreeTableMap[thread_id] = new asyncfreetable_t();
 		postponedTempFreeTableMap[thread_id] = new asynctempfreetable_t();
 		postponedTempFreeTableMap2[thread_id] = new asynctempfreetable2_t();
@@ -692,7 +696,7 @@ HI_error_t OpenCLDriver::createKernelArgMap(int threadID) {
     	eventMap[1+thread_id*MAX_NUM_QUEUES_PER_THREAD]= e1;
     	threadQueueEventMap[thread_id] = eventMap;
 		masterAddressTableMap[thread_id] = new addresstable_t();
-		masterHandleTable[thread_id] = new addressmap_t();
+		masterHandleTable[thread_id] = new memhandlemap_t();
 		postponedFreeTableMap[thread_id] = new asyncfreetable_t();
 		postponedTempFreeTableMap[thread_id] = new asynctempfreetable_t();
 		postponedTempFreeTableMap2[thread_id] = new asynctempfreetable2_t();
@@ -1064,7 +1068,7 @@ HI_error_t  OpenCLDriver::HI_malloc1D(const void *hostPtr, void **devPtr, size_t
 #endif
     HI_error_t result = HI_error;
     cl_int  err = CL_SUCCESS;
-	void * memHandle;
+	cl_mem memHandle;
 	cl_mem_flags mem_flags = convert2CLMemFlags(flags);
 
     if(HI_get_device_address(hostPtr, devPtr, NULL, NULL, asyncID, tconf->threadID) == HI_success ) {
@@ -1087,7 +1091,7 @@ HI_error_t  OpenCLDriver::HI_malloc1D(const void *hostPtr, void **devPtr, size_t
 			memPool->erase(it);
             HI_set_device_address(hostPtr, *devPtr, count, asyncID, tconf->threadID);
 		} else {
-        	memHandle = (void*) clCreateBuffer(clContext, mem_flags, count, NULL, &err);
+        	memHandle = clCreateBuffer(clContext, mem_flags, count, NULL, &err);
 #ifdef _OPENARC_PROFILE_
 			tconf->IDMallocCnt++;
 			tconf->IDMallocSize += count;
@@ -1104,7 +1108,7 @@ HI_error_t  OpenCLDriver::HI_malloc1D(const void *hostPtr, void **devPtr, size_t
 				for (it = memPool->begin(); it != memPool->end(); ++it) {
 					tDevPtr = it->second;
 					if( HI_get_device_mem_handle(tDevPtr, &tHandle, tconf->threadID) == HI_success ) { 
-        				err = clReleaseMemObject((cl_mem)(tHandle.basePtr));
+        				err = clReleaseMemObject((cl_mem)(tHandle.memHandle));
 #ifdef _OPENARC_PROFILE_
 						tconf->IDFreeCnt++;
 #endif
@@ -1116,7 +1120,7 @@ HI_error_t  OpenCLDriver::HI_malloc1D(const void *hostPtr, void **devPtr, size_t
 					}
 				}
 				memPool->clear();
-        		memHandle = (void*) clCreateBuffer(clContext, mem_flags, count, NULL, &err);
+        		memHandle = clCreateBuffer(clContext, mem_flags, count, NULL, &err);
 			}
         	if(err == CL_SUCCESS) {
 #if defined(OPENARC_ARCH) && OPENARC_ARCH == 3
@@ -1176,7 +1180,7 @@ HI_error_t  OpenCLDriver::HI_malloc1D_unified(const void *hostPtr, void **devPtr
 #endif
     HI_error_t result = HI_error;
     cl_int  err;
-	void *memHandle;
+	cl_mem memHandle;
 	cl_mem_flags mem_flags = convert2CLMemFlags(flags);
 
     if(HI_get_device_address(hostPtr, devPtr, NULL, NULL, asyncID, tconf->threadID) == HI_success ) {
@@ -1194,7 +1198,7 @@ HI_error_t  OpenCLDriver::HI_malloc1D_unified(const void *hostPtr, void **devPtr
 			}
 		} else {
 			//[FIXME] This doesn not allocate unified memory.
-        	memHandle = (void*) clCreateBuffer(clContext, mem_flags, count, NULL, &err);
+        	memHandle = clCreateBuffer(clContext, mem_flags, count, NULL, &err);
         	if(err == CL_SUCCESS) {
 #if defined(OPENARC_ARCH) && OPENARC_ARCH == 3
 				if( HI_openarcrt_memoryalignment > 0 ) {
@@ -1322,7 +1326,7 @@ HI_error_t OpenCLDriver::HI_free( const void *hostPtr, int asyncID, int threadID
 /*
 			HI_device_mem_handle_t tHandle;
 			if( HI_get_device_mem_handle(devPtr, &tHandle, tconf->threadID) == HI_success ) { 
-        		cl_int  err = clReleaseMemObject((cl_mem)(tHandle.basePtr));
+        		cl_int  err = clReleaseMemObject((cl_mem)(tHandle.memHandle));
         		if( err == CL_SUCCESS ) {
             		HI_remove_device_address(hostPtr, asyncID, tconf->threadID);
 					free(devPtr);
@@ -1375,7 +1379,7 @@ HI_error_t OpenCLDriver::HI_free_unified( const void *hostPtr, int asyncID, int 
 		} else {
 			HI_device_mem_handle_t tHandle;
 			if( HI_get_device_mem_handle(devPtr, &tHandle, tconf->threadID) == HI_success ) { 
-        		cl_int  err = clReleaseMemObject((cl_mem)(tHandle.basePtr));
+        		cl_int  err = clReleaseMemObject((cl_mem)(tHandle.memHandle));
         		if( err == CL_SUCCESS ) {
             		HI_remove_device_address(hostPtr, asyncID, tconf->threadID);
 					free(devPtr);
@@ -1435,7 +1439,7 @@ void OpenCLDriver::HI_tempMalloc1D( void** tempPtr, size_t count, acc_device_t d
 			HI_device_mem_handle_t tHandle;
 			tempMallocSet.erase(*tempPtr);
 			if( HI_get_device_mem_handle(*tempPtr, &tHandle, tconf->threadID) == HI_success ) { 
-        		cl_int  err = clReleaseMemObject((cl_mem)(tHandle.basePtr));
+        		cl_int  err = clReleaseMemObject((cl_mem)(tHandle.memHandle));
         		if( err == CL_SUCCESS ) {
 					free(*tempPtr);
 					HI_remove_device_mem_handle(*tempPtr, tconf->threadID);
@@ -1447,7 +1451,7 @@ void OpenCLDriver::HI_tempMalloc1D( void** tempPtr, size_t count, acc_device_t d
         }
         cl_int err;
 		cl_mem_flags mem_flags = convert2CLMemFlags(flags);
-        void * memHandle = (void*) clCreateBuffer(clContext, mem_flags, count, NULL, &err);
+        cl_mem memHandle = clCreateBuffer(clContext, mem_flags, count, NULL, &err);
 #if defined(OPENARC_ARCH) && OPENARC_ARCH == 3
 		if( HI_openarcrt_memoryalignment > 0 ) {
 			posix_memalign(tempPtr, AOCL_ALIGNMENT, count);
@@ -1529,7 +1533,7 @@ void OpenCLDriver::HI_tempMalloc1D_async( void** tempPtr, size_t count, acc_devi
 	devType == acc_device_altera || devType == acc_device_altera_emulator || devType == acc_device_current) {
         cl_int err;
 		cl_mem_flags mem_flags = convert2CLMemFlags(flags);
-        void * memHandle = (void*) clCreateBuffer(clContext, mem_flags, count, NULL, &err);
+        cl_mem memHandle = clCreateBuffer(clContext, mem_flags, count, NULL, &err);
 #if defined(OPENARC_ARCH) && OPENARC_ARCH == 3
 		if( HI_openarcrt_memoryalignment > 0 ) {
 			posix_memalign(tempPtr, AOCL_ALIGNMENT, count);
@@ -1607,7 +1611,7 @@ void OpenCLDriver::HI_tempFree( void* tempPtr, acc_device_t devType, int threadI
 			HI_device_mem_handle_t tHandle;
 			tempMallocSet.erase(tempPtr);
 			if( HI_get_device_mem_handle(tempPtr, &tHandle, tconf->threadID) == HI_success ) { 
-        		cl_int  err = clReleaseMemObject((cl_mem)(tHandle.basePtr));
+        		cl_int  err = clReleaseMemObject((cl_mem)(tHandle.memHandle));
         		if( err == CL_SUCCESS ) {
 					free(tempPtr);
 					HI_remove_device_mem_handle(tempPtr, tconf->threadID);
@@ -1674,7 +1678,7 @@ void OpenCLDriver::HI_tempMalloc1D( void** tempPtr, size_t count, acc_device_t d
 	devType == acc_device_altera || devType == acc_device_altera_emulator || devType == acc_device_current) {
         cl_int err;
 		cl_mem_flags mem_flags = convert2CLMemFlags(flags);
-        void * memHandle;
+        cl_mem memHandle;
         memPool_t *memPool = memPoolMap[tconf->threadID];
         std::multimap<size_t, void *>::iterator it = memPool->find(count);
         if( it != memPool->end()) {
@@ -1686,7 +1690,7 @@ void OpenCLDriver::HI_tempMalloc1D( void** tempPtr, size_t count, acc_device_t d
             *tempPtr = it->second;
             memPool->erase(it);
         } else {
-            memHandle = (void*) clCreateBuffer(clContext, mem_flags, count, NULL, &err);
+            memHandle = clCreateBuffer(clContext, mem_flags, count, NULL, &err);
             if(err != CL_SUCCESS) {
 #ifdef _OPENARC_PROFILE_
                 if( HI_openarcrt_verbosity > 2 ) {
@@ -1698,7 +1702,7 @@ void OpenCLDriver::HI_tempMalloc1D( void** tempPtr, size_t count, acc_device_t d
                 for (it = memPool->begin(); it != memPool->end(); ++it) {
                     tDevPtr = it->second;
                     if( HI_get_device_mem_handle(tDevPtr, &tHandle, tconf->threadID) == HI_success ) {             
-                        err = clReleaseMemObject((cl_mem)(tHandle.basePtr));
+                        err = clReleaseMemObject((cl_mem)(tHandle.memHandle));
 #ifdef _OPENARC_PROFILE_     
                         tconf->IDFreeCnt++;
 #endif                       
@@ -1710,7 +1714,7 @@ void OpenCLDriver::HI_tempMalloc1D( void** tempPtr, size_t count, acc_device_t d
                     }        
                 }        
                 memPool->clear();
-                memHandle = (void*) clCreateBuffer(clContext, mem_flags, count, NULL, &err);
+                memHandle = clCreateBuffer(clContext, mem_flags, count, NULL, &err);
             }
             if(err == CL_SUCCESS) {
 #if defined(OPENARC_ARCH) && OPENARC_ARCH == 3
@@ -1794,7 +1798,7 @@ void OpenCLDriver::HI_tempMalloc1D_async( void** tempPtr, size_t count, acc_devi
 	devType == acc_device_altera || devType == acc_device_altera_emulator || devType == acc_device_current) {
         cl_int err;
 		cl_mem_flags mem_flags = convert2CLMemFlags(flags);
-        void * memHandle;
+        cl_mem memHandle;
         memPool_t *memPool = memPoolMap[tconf->threadID];
         std::multimap<size_t, void *>::iterator it = memPool->find(count);
         if( it != memPool->end()) {
@@ -1806,7 +1810,7 @@ void OpenCLDriver::HI_tempMalloc1D_async( void** tempPtr, size_t count, acc_devi
             *tempPtr = it->second;
             memPool->erase(it);
         } else {
-            memHandle = (void*) clCreateBuffer(clContext, mem_flags, count, NULL, &err);
+            memHandle = clCreateBuffer(clContext, mem_flags, count, NULL, &err);
             if(err != CL_SUCCESS) {
 #ifdef _OPENARC_PROFILE_
                 if( HI_openarcrt_verbosity > 2 ) {
@@ -1818,7 +1822,7 @@ void OpenCLDriver::HI_tempMalloc1D_async( void** tempPtr, size_t count, acc_devi
                 for (it = memPool->begin(); it != memPool->end(); ++it) {
                     tDevPtr = it->second;
                     if( HI_get_device_mem_handle(tDevPtr, &tHandle, tconf->threadID) == HI_success ) {             
-                        err = clReleaseMemObject((cl_mem)(tHandle.basePtr));
+                        err = clReleaseMemObject((cl_mem)(tHandle.memHandle));
 #ifdef _OPENARC_PROFILE_     
                         tconf->IDFreeCnt++;
 #endif                       
@@ -1830,7 +1834,7 @@ void OpenCLDriver::HI_tempMalloc1D_async( void** tempPtr, size_t count, acc_devi
                     }        
                 }        
                 memPool->clear();
-                memHandle = (void*) clCreateBuffer(clContext, mem_flags, count, NULL, &err);
+                memHandle = clCreateBuffer(clContext, mem_flags, count, NULL, &err);
             }
             if(err == CL_SUCCESS) {
 #if defined(OPENARC_ARCH) && OPENARC_ARCH == 3
@@ -1988,16 +1992,16 @@ HI_error_t  OpenCLDriver::HI_memcpy(void *dst, const void *src, size_t count, HI
 /*
 					size_t prefix = AOCL_ALIGNMENT - ((size_t) src & (AOCL_ALIGNMENT - 1));
 					if( (prefix != AOCL_ALIGNMENT) && (prefix < count) ) {
-        				err = clEnqueueWriteBuffer(queue, (cl_mem)(tHandle.basePtr), CL_TRUE, tHandle.offset, prefix, src, 0, NULL, NULL);
-        				err = clEnqueueWriteBuffer(queue, (cl_mem)(tHandle.basePtr), CL_TRUE, (tHandle.offset + prefix), count-prefix, (const void *)((char*)(src) + prefix), 0, NULL, NULL);
+        				err = clEnqueueWriteBuffer(queue, (cl_mem)(tHandle.memHandle), CL_TRUE, tHandle.offset, prefix, src, 0, NULL, NULL);
+        				err = clEnqueueWriteBuffer(queue, (cl_mem)(tHandle.memHandle), CL_TRUE, (tHandle.offset + prefix), count-prefix, (const void *)((char*)(src) + prefix), 0, NULL, NULL);
 					} else {
-        				err = clEnqueueWriteBuffer(queue, (cl_mem)(tHandle.basePtr), CL_TRUE, tHandle.offset, count, src, 0, NULL, NULL);
+        				err = clEnqueueWriteBuffer(queue, (cl_mem)(tHandle.memHandle), CL_TRUE, tHandle.offset, count, src, 0, NULL, NULL);
 					}
 */
 					size_t offset = tHandle.offset;
 					size_t h_prefix = AOCL_ALIGNMENT - ((size_t) src & (AOCL_ALIGNMENT - 1));
 					size_t d_prefix = AOCL_ALIGNMENT - ((size_t) offset & (AOCL_ALIGNMENT - 1));
-					cl_mem mem = (cl_mem)tHandle.basePtr;
+					cl_mem mem = (cl_mem)tHandle.memHandle;
 
     				if (h_prefix == AOCL_ALIGNMENT && d_prefix == AOCL_ALIGNMENT) {
                 		err = clEnqueueWriteBuffer(queue, mem, CL_TRUE, offset, count, src, 0, NULL, NULL);
@@ -2028,10 +2032,10 @@ HI_error_t  OpenCLDriver::HI_memcpy(void *dst, const void *src, size_t count, HI
         				}
     				}
 				} else {
-        			err = clEnqueueWriteBuffer(queue, (cl_mem)(tHandle.basePtr), CL_TRUE, tHandle.offset, count, src, 0, NULL, NULL);
+        			err = clEnqueueWriteBuffer(queue, (cl_mem)(tHandle.memHandle), CL_TRUE, tHandle.offset, count, src, 0, NULL, NULL);
 				}
 #else
-        		err = clEnqueueWriteBuffer(queue, (cl_mem)(tHandle.basePtr), CL_TRUE, tHandle.offset, count, src, 0, NULL, NULL);
+        		err = clEnqueueWriteBuffer(queue, (cl_mem)(tHandle.memHandle), CL_TRUE, tHandle.offset, count, src, 0, NULL, NULL);
 #endif
 			} else {
         		fprintf(stderr, "[ERROR in OpenCLDriver::HI_memcpy()] Cannot find a device pointer (%lx) to memory handle mapping; exit!\n", (unsigned long)dst);
@@ -2050,16 +2054,16 @@ HI_error_t  OpenCLDriver::HI_memcpy(void *dst, const void *src, size_t count, HI
 /*
 					size_t prefix = AOCL_ALIGNMENT - ((size_t) dst & (AOCL_ALIGNMENT - 1));
 					if( (prefix != AOCL_ALIGNMENT) && (prefix < count) ) {
-        				err = clEnqueueReadBuffer(queue, (cl_mem)(tHandle.basePtr), CL_TRUE, tHandle.offset, prefix, dst, 0, NULL, NULL);
-        				err = clEnqueueReadBuffer(queue, (cl_mem)(tHandle.basePtr), CL_TRUE, (tHandle.offset + prefix), count-prefix, (void *)((char*)(dst) + prefix), 0, NULL, NULL);
+        				err = clEnqueueReadBuffer(queue, (cl_mem)(tHandle.memHandle), CL_TRUE, tHandle.offset, prefix, dst, 0, NULL, NULL);
+        				err = clEnqueueReadBuffer(queue, (cl_mem)(tHandle.memHandle), CL_TRUE, (tHandle.offset + prefix), count-prefix, (void *)((char*)(dst) + prefix), 0, NULL, NULL);
 					} else {
-        				err = clEnqueueReadBuffer(queue, (cl_mem)(tHandle.basePtr), CL_TRUE, tHandle.offset, count, dst, 0, NULL, NULL);
+        				err = clEnqueueReadBuffer(queue, (cl_mem)(tHandle.memHandle), CL_TRUE, tHandle.offset, count, dst, 0, NULL, NULL);
 					}
 */
 					size_t offset = tHandle.offset;
     				size_t h_prefix = AOCL_ALIGNMENT - ((size_t) dst & (AOCL_ALIGNMENT - 1));
     				size_t d_prefix = AOCL_ALIGNMENT - ((size_t) offset & (AOCL_ALIGNMENT - 1));
-					cl_mem mem = (cl_mem)tHandle.basePtr;
+					cl_mem mem = (cl_mem)tHandle.memHandle;
     				if (h_prefix == AOCL_ALIGNMENT && d_prefix == AOCL_ALIGNMENT) {
         				err = clEnqueueReadBuffer(queue, mem, CL_TRUE, offset, count, dst, 0, NULL, NULL);
     				} else if (h_prefix == d_prefix) {
@@ -2089,10 +2093,10 @@ HI_error_t  OpenCLDriver::HI_memcpy(void *dst, const void *src, size_t count, HI
         				}
     				}
 				} else {
-        			err = clEnqueueReadBuffer(queue, (cl_mem)(tHandle.basePtr), CL_TRUE, tHandle.offset, count, dst, 0, NULL, NULL);
+        			err = clEnqueueReadBuffer(queue, (cl_mem)(tHandle.memHandle), CL_TRUE, tHandle.offset, count, dst, 0, NULL, NULL);
 				}
 #else
-        		err = clEnqueueReadBuffer(queue, (cl_mem)(tHandle.basePtr), CL_TRUE, tHandle.offset, count, dst, 0, NULL, NULL);
+        		err = clEnqueueReadBuffer(queue, (cl_mem)(tHandle.memHandle), CL_TRUE, tHandle.offset, count, dst, 0, NULL, NULL);
 #endif
 			} else {
         		fprintf(stderr, "[ERROR in OpenCLDriver::HI_memcpy()] Cannot find a device pointer (%lx) to memory handle mapping; exit!\n", (unsigned long)src);
@@ -2179,16 +2183,16 @@ HI_error_t  OpenCLDriver::HI_memcpy_unified(void *dst, const void *src, size_t c
 				if( HI_openarcrt_memoryalignment > 0 ) {
 					size_t prefix = AOCL_ALIGNMENT - ((size_t) src & (AOCL_ALIGNMENT - 1));
 					if( (prefix != AOCL_ALIGNMENT) && (prefix < count) ) {
-        				err = clEnqueueWriteBuffer(queue, (cl_mem)(tHandle.basePtr), CL_TRUE, tHandle.offset, prefix, src, 0, NULL, NULL);
-        				err = clEnqueueWriteBuffer(queue, (cl_mem)(tHandle.basePtr), CL_TRUE, (tHandle.offset + prefix), count-prefix, (const void *)((char*)(src) + prefix), 0, NULL, NULL);
+        				err = clEnqueueWriteBuffer(queue, (cl_mem)(tHandle.memHandle), CL_TRUE, tHandle.offset, prefix, src, 0, NULL, NULL);
+        				err = clEnqueueWriteBuffer(queue, (cl_mem)(tHandle.memHandle), CL_TRUE, (tHandle.offset + prefix), count-prefix, (const void *)((char*)(src) + prefix), 0, NULL, NULL);
 					} else {
-        				err = clEnqueueWriteBuffer(queue, (cl_mem)(tHandle.basePtr), CL_TRUE, tHandle.offset, count, src, 0, NULL, NULL);
+        				err = clEnqueueWriteBuffer(queue, (cl_mem)(tHandle.memHandle), CL_TRUE, tHandle.offset, count, src, 0, NULL, NULL);
 					}
 				} else {
-        			err = clEnqueueWriteBuffer(queue, (cl_mem)(tHandle.basePtr), CL_TRUE, tHandle.offset, count, src, 0, NULL, NULL);
+        			err = clEnqueueWriteBuffer(queue, (cl_mem)(tHandle.memHandle), CL_TRUE, tHandle.offset, count, src, 0, NULL, NULL);
 				}
 #else
-        		err = clEnqueueWriteBuffer(queue, (cl_mem)(tHandle.basePtr), CL_TRUE, tHandle.offset, count, src, 0, NULL, NULL);
+        		err = clEnqueueWriteBuffer(queue, (cl_mem)(tHandle.memHandle), CL_TRUE, tHandle.offset, count, src, 0, NULL, NULL);
 #endif
 			} else {
         		fprintf(stderr, "[ERROR in OpenCLDriver::HI_memcpy_unified()] Cannot find a device pointer (%lx) to memory handle mapping; exit!\n", (unsigned long)dst);
@@ -2206,16 +2210,16 @@ HI_error_t  OpenCLDriver::HI_memcpy_unified(void *dst, const void *src, size_t c
 				if( HI_openarcrt_memoryalignment > 0 ) {
 					size_t prefix = AOCL_ALIGNMENT - ((size_t) dst & (AOCL_ALIGNMENT - 1));
 					if( (prefix != AOCL_ALIGNMENT) && (prefix < count) ) {
-        				err = clEnqueueReadBuffer(queue, (cl_mem)(tHandle.basePtr), CL_TRUE, tHandle.offset, prefix, dst, 0, NULL, NULL);
-        				err = clEnqueueReadBuffer(queue, (cl_mem)(tHandle.basePtr), CL_TRUE, (tHandle.offset + prefix), count-prefix, (void *)((char*)(dst) + prefix), 0, NULL, NULL);
+        				err = clEnqueueReadBuffer(queue, (cl_mem)(tHandle.memHandle), CL_TRUE, tHandle.offset, prefix, dst, 0, NULL, NULL);
+        				err = clEnqueueReadBuffer(queue, (cl_mem)(tHandle.memHandle), CL_TRUE, (tHandle.offset + prefix), count-prefix, (void *)((char*)(dst) + prefix), 0, NULL, NULL);
 					} else {
-        				err = clEnqueueReadBuffer(queue, (cl_mem)(tHandle.basePtr), CL_TRUE, tHandle.offset, count, dst, 0, NULL, NULL);
+        				err = clEnqueueReadBuffer(queue, (cl_mem)(tHandle.memHandle), CL_TRUE, tHandle.offset, count, dst, 0, NULL, NULL);
 					}
 				} else {
-        			err = clEnqueueReadBuffer(queue, (cl_mem)(tHandle.basePtr), CL_TRUE, tHandle.offset, count, dst, 0, NULL, NULL);
+        			err = clEnqueueReadBuffer(queue, (cl_mem)(tHandle.memHandle), CL_TRUE, tHandle.offset, count, dst, 0, NULL, NULL);
 				}
 #else
-        		err = clEnqueueReadBuffer(queue, (cl_mem)(tHandle.basePtr), CL_TRUE, tHandle.offset, count, dst, 0, NULL, NULL);
+        		err = clEnqueueReadBuffer(queue, (cl_mem)(tHandle.memHandle), CL_TRUE, tHandle.offset, count, dst, 0, NULL, NULL);
 #endif
 			} else {
         		fprintf(stderr, "[ERROR in OpenCLDriver::HI_memcpy_unified()] Cannot find a device pointer (%lx) to memory handle mapping; exit!\n", (unsigned long)src);
@@ -2302,16 +2306,16 @@ HI_error_t OpenCLDriver::HI_memcpy_async(void *dst, const void *src, size_t coun
 				if( HI_openarcrt_memoryalignment > 0 ) {
 					size_t prefix = AOCL_ALIGNMENT - ((size_t) src & (AOCL_ALIGNMENT - 1));
 					if( (prefix != AOCL_ALIGNMENT) && (prefix < count) ) {
-        				err = clEnqueueWriteBuffer(queue, (cl_mem)(tHandle.basePtr), CL_FALSE, tHandle.offset, prefix, src, 0, NULL, event);
-        				err = clEnqueueWriteBuffer(queue, (cl_mem)(tHandle.basePtr), CL_FALSE, (tHandle.offset + prefix), count-prefix, (const void *)((char*)(src) + prefix), 0, NULL, event);
+        				err = clEnqueueWriteBuffer(queue, (cl_mem)(tHandle.memHandle), CL_FALSE, tHandle.offset, prefix, src, 0, NULL, event);
+        				err = clEnqueueWriteBuffer(queue, (cl_mem)(tHandle.memHandle), CL_FALSE, (tHandle.offset + prefix), count-prefix, (const void *)((char*)(src) + prefix), 0, NULL, event);
 					} else {
-        				err = clEnqueueWriteBuffer(queue, (cl_mem)(tHandle.basePtr), CL_FALSE, tHandle.offset, count, src, 0, NULL, event);
+        				err = clEnqueueWriteBuffer(queue, (cl_mem)(tHandle.memHandle), CL_FALSE, tHandle.offset, count, src, 0, NULL, event);
 					}
 				} else {
-        			err = clEnqueueWriteBuffer(queue, (cl_mem)(tHandle.basePtr), CL_FALSE, tHandle.offset, count, src, 0, NULL, event);
+        			err = clEnqueueWriteBuffer(queue, (cl_mem)(tHandle.memHandle), CL_FALSE, tHandle.offset, count, src, 0, NULL, event);
 				}
 #else
-        		err = clEnqueueWriteBuffer(queue, (cl_mem)(tHandle.basePtr), CL_FALSE, tHandle.offset, count, src, 0, NULL, event);
+        		err = clEnqueueWriteBuffer(queue, (cl_mem)(tHandle.memHandle), CL_FALSE, tHandle.offset, count, src, 0, NULL, event);
 #endif
 			} else {
         		fprintf(stderr, "[ERROR in OpenCLDriver::HI_memcpy_async()] Cannot find a device pointer (%lx) to memory handle mapping; exit!\n", (unsigned long)dst);
@@ -2329,16 +2333,16 @@ HI_error_t OpenCLDriver::HI_memcpy_async(void *dst, const void *src, size_t coun
 				if( HI_openarcrt_memoryalignment > 0 ) {
 					size_t prefix = AOCL_ALIGNMENT - ((size_t) dst & (AOCL_ALIGNMENT - 1));
 					if( (prefix != AOCL_ALIGNMENT) && (prefix < count) ) {
-        				err = clEnqueueReadBuffer(queue, (cl_mem)(tHandle.basePtr), CL_FALSE, tHandle.offset, prefix, dst, 0, NULL, event);
-        				err = clEnqueueReadBuffer(queue, (cl_mem)(tHandle.basePtr), CL_FALSE, (tHandle.offset + prefix), count-prefix, (void *)((char*)(dst) + prefix), 0, NULL, event);
+        				err = clEnqueueReadBuffer(queue, (cl_mem)(tHandle.memHandle), CL_FALSE, tHandle.offset, prefix, dst, 0, NULL, event);
+        				err = clEnqueueReadBuffer(queue, (cl_mem)(tHandle.memHandle), CL_FALSE, (tHandle.offset + prefix), count-prefix, (void *)((char*)(dst) + prefix), 0, NULL, event);
 					} else {
-        				err = clEnqueueReadBuffer(queue, (cl_mem)(tHandle.basePtr), CL_FALSE, tHandle.offset, count, dst, 0, NULL, event);
+        				err = clEnqueueReadBuffer(queue, (cl_mem)(tHandle.memHandle), CL_FALSE, tHandle.offset, count, dst, 0, NULL, event);
 					}
 				} else {
-        			err = clEnqueueReadBuffer(queue, (cl_mem)(tHandle.basePtr), CL_FALSE, tHandle.offset, count, dst, 0, NULL, event);
+        			err = clEnqueueReadBuffer(queue, (cl_mem)(tHandle.memHandle), CL_FALSE, tHandle.offset, count, dst, 0, NULL, event);
 				}
 #else
-        		err = clEnqueueReadBuffer(queue, (cl_mem)(tHandle.basePtr), CL_FALSE, tHandle.offset, count, dst, 0, NULL, event);
+        		err = clEnqueueReadBuffer(queue, (cl_mem)(tHandle.memHandle), CL_FALSE, tHandle.offset, count, dst, 0, NULL, event);
 #endif
 			} else {
         		fprintf(stderr, "[ERROR in OpenCLDriver::HI_memcpy_async()] Cannot find a device pointer (%lx) to memory handle mapping; exit!\n", (unsigned long)src);
@@ -2422,7 +2426,7 @@ HI_error_t OpenCLDriver::HI_memcpy_asyncS(void *dst, const void *src, size_t cou
 		memcpy(tSrc, src, count);
 		HI_device_mem_handle_t tHandle;
 		if( HI_get_device_mem_handle(dst, &tHandle, tconf->threadID) == HI_success ) {
-        	err = clEnqueueWriteBuffer(queue, (cl_mem)(tHandle.basePtr), CL_FALSE, tHandle.offset, count, tSrc, 0, NULL, event);
+        	err = clEnqueueWriteBuffer(queue, (cl_mem)(tHandle.memHandle), CL_FALSE, tHandle.offset, count, tSrc, 0, NULL, event);
 		} else {
         	fprintf(stderr, "[ERROR in OpenCLDriver::HI_memcpy_asyncS()] Cannot find a device pointer (%lx) to memory handle mapping; exit!\n", (unsigned long)dst);
 #ifdef _OPENARC_PROFILE_
@@ -2438,7 +2442,7 @@ HI_error_t OpenCLDriver::HI_memcpy_asyncS(void *dst, const void *src, size_t cou
 		HI_set_temphost_address(dst, tDst, async);
 		HI_device_mem_handle_t tHandle;
 		if( HI_get_device_mem_handle(src, &tHandle, tconf->threadID) == HI_success ) {
-        	err = clEnqueueReadBuffer(queue, (cl_mem)(tHandle.basePtr), CL_FALSE, tHandle.offset, count, tDst, 0, NULL, event);
+        	err = clEnqueueReadBuffer(queue, (cl_mem)(tHandle.memHandle), CL_FALSE, tHandle.offset, count, tDst, 0, NULL, event);
 		} else {
         	fprintf(stderr, "[ERROR in OpenCLDriver::HI_memcpy_asyncS()] Cannot find a device pointer (%lx) to memory handle mapping; exit!\n", (unsigned long)src);
 #ifdef _OPENARC_PROFILE_
@@ -2596,16 +2600,16 @@ HI_error_t OpenCLDriver::HI_register_kernel_arg(std::string kernel_name, int arg
 		HI_device_mem_handle_t tHandle;
 		size_t dataSize = 0;
 		if( HI_get_device_mem_handle(*((void **)arg_value), &tHandle, &dataSize, tconf->threadID) == HI_success ) {
-			void * localBasePtr = tHandle.basePtr;
+			cl_mem localMemHandle = tHandle.memHandle;
 			if( tHandle.offset == 0 ) {
-				*(kernelParams->kernelParams + arg_index) = localBasePtr;
+				*(kernelParams->kernelParams + arg_index) = (void *)&localMemHandle;
 				*(kernelParams->kernelParamsOffset + arg_index) = 0;
 				*(kernelParams->kernelParamsInfo + arg_index) = arg_trait;
     			*(kernelParams->kernelParamSubBuffers + arg_index) = NULL;
-    			err = clSetKernelArg((cl_kernel)(tconf->kernelsMap.at(this).at(kernel_name)), arg_index, arg_size, &localBasePtr);
+    			err = clSetKernelArg((cl_kernel)(tconf->kernelsMap.at(this).at(kernel_name)), arg_index, arg_size, &localMemHandle);
 			} else {
 				size_t localOffset = tHandle.offset;
-				*(kernelParams->kernelParams + arg_index) = localBasePtr;
+				*(kernelParams->kernelParams + arg_index) = (void *)&localMemHandle;
 				*(kernelParams->kernelParamsOffset + arg_index) = localOffset/unitSize;
 				*(kernelParams->kernelParamsInfo + arg_index) = arg_trait;
 				cl_buffer_region localRegion;
@@ -2621,7 +2625,7 @@ HI_error_t OpenCLDriver::HI_register_kernel_arg(std::string kernel_name, int arg
 				} else { //unknown or temporary
 					flags = CL_MEM_READ_WRITE;
 				}
-    			cl_mem subBuffer = clCreateSubBuffer((cl_mem)localBasePtr, flags, CL_BUFFER_CREATE_TYPE_REGION, &localRegion, &err);
+    			cl_mem subBuffer = clCreateSubBuffer((cl_mem)localMemHandle, flags, CL_BUFFER_CREATE_TYPE_REGION, &localRegion, &err);
     			*(kernelParams->kernelParamSubBuffers + arg_index) = subBuffer;
     			err = clSetKernelArg((cl_kernel)(tconf->kernelsMap.at(this).at(kernel_name)), arg_index, arg_size, &subBuffer);
 			}
@@ -3272,9 +3276,9 @@ void OpenCLDriver::HI_malloc(void **devPtr, size_t size, HI_MallocKind_t flags, 
     double ltime = HI_get_localtime();
 #endif
     HostConf_t * tconf = getHostConf(threadID);
-	void * memHandle;
+	cl_mem memHandle;
 	cl_mem_flags mem_flags = convert2CLMemFlags(flags);
-    memHandle = (void*) clCreateBuffer(clContext, mem_flags, size, NULL, &err);
+    memHandle = clCreateBuffer(clContext, mem_flags, size, NULL, &err);
 #ifdef _OPENARC_PROFILE_
 	tconf->IDMallocCnt++;
 	tconf->IDMallocSize += size;
@@ -3326,7 +3330,7 @@ void OpenCLDriver::HI_free(void *devPtr, int threadID) {
         //Free device memory if it is not on unified memory.
 		HI_device_mem_handle_t tHandle;
 		if( HI_get_device_mem_handle(devPtr, &tHandle, tconf->threadID) == HI_success ) { 
-       		err = clReleaseMemObject((cl_mem)(tHandle.basePtr));
+       		err = clReleaseMemObject((cl_mem)(tHandle.memHandle));
 #ifdef _OPENARC_PROFILE_
 			tconf->IDFreeCnt++;
 #endif

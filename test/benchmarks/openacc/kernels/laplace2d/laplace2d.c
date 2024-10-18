@@ -30,12 +30,16 @@
 	#define NM 4096
 #endif
 
-double A[NN][NM];
-double Anew[NN][NM];
+#ifndef _DTYPE
+	#define _DTYPE double
+#endif
+
+_DTYPE A[NN][NM];
+_DTYPE Anew[NN][NM];
 
 #if VERIFICATION == 1
-double A_CPU[NN][NM];
-double Anew_CPU[NN][NM];
+_DTYPE A_CPU[NN][NM];
+_DTYPE Anew_CPU[NN][NM];
 #endif
 
 int main(int argc, char** argv)
@@ -44,18 +48,18 @@ int main(int argc, char** argv)
     int m = NM;
     int iter_max = 1000;
 
-    double tol = 1.0e-6;
-    double error     = 1.0;
+    _DTYPE tol = 1.0e-6;
+    _DTYPE error     = 1.0;
     int i, j;
     int iter = 0;
-    double runtime;
+    _DTYPE runtime;
 
-    memset(A, 0, n * m * sizeof(double));
-    memset(Anew, 0, n * m * sizeof(double));
+    memset(A, 0, n * m * sizeof(_DTYPE));
+    memset(Anew, 0, n * m * sizeof(_DTYPE));
 
 #if VERIFICATION == 1
-    memset(A_CPU, 0, n * m * sizeof(double));
-    memset(Anew_CPU, 0, n * m * sizeof(double));
+    memset(A_CPU, 0, n * m * sizeof(_DTYPE));
+    memset(Anew_CPU, 0, n * m * sizeof(_DTYPE));
 #endif
 
     for (j = 0; j < n; j++)
@@ -87,7 +91,7 @@ int main(int argc, char** argv)
 //#pragma omp parallel for shared(m, n, Anew, A)
 #pragma acc parallel num_gangs(16) num_workers(32) reduction(max:error) private(j)
         {
-			double lerror = 0.0;
+			_DTYPE lerror = 0.0;
 #pragma acc loop gang
             for( j = 1; j < n-1; j++)
             {
@@ -155,9 +159,9 @@ int main(int argc, char** argv)
         }
 
         {
-            double cpu_sum = 0.0f;
-            double gpu_sum = 0.0f;
-            double rel_err = 0.0f;
+            _DTYPE cpu_sum = 0.0f;
+            _DTYPE gpu_sum = 0.0f;
+            _DTYPE rel_err = 0.0f;
 
             for (i = 1; i < m-1; i++)
             {

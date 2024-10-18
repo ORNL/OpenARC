@@ -444,7 +444,11 @@ array elements).
 
 []
 - If OpenARC translates multiple files separately, and compute regions in different files use the same variable, the translated output will have duplicate definitions of GPU variables for the same variable.
-	
+
+[]
+- __const address space qualifier is not supported by NVIDIA OpenCL.
+- In the device kernel, all typecasting should include its address space qualifier (e.g., __global, __constant),
+but there exist some typecastings that miss the address space qualifier (rodinia/backprop) 
 
 
 ###############################

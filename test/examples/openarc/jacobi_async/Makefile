@@ -14,10 +14,10 @@ CSRCS = jacobi.c
 # Set macros used for the input program #
 #########################################
 VERIFICATION ?= 1
-SIZE ?= 4096
-DEFSET_CPU = -DVERIFICATION=$(VERIFICATION) -DSIZE=$(SIZE) -DENABLE_OPENACC=0
-DEFSET_LLVM = -DVERIFICATION=$(VERIFICATION) -DSIZE=$(SIZE) -DENABLE_OPENACC=0 -Warc,-macro=SIZE=$(SIZE) $(ARCMACRO)
-DEFSET_ACC = -DVERIFICATION=$(VERIFICATION) -DSIZE=$(SIZE)
+ASIZE ?= 4096
+DEFSET_CPU = -DVERIFICATION=$(VERIFICATION) -DASIZE=$(ASIZE) -DENABLE_OPENACC=0
+DEFSET_LLVM = -DVERIFICATION=$(VERIFICATION) -DASIZE=$(ASIZE) -DENABLE_OPENACC=0 -Warc,-macro=ASIZE=$(ASIZE) $(ARCMACRO)
+#DEFSET_ACC = -DVERIFICATION=$(VERIFICATION) -DASIZE=$(ASIZE)
 
 ##########################################################
 # Makefile options that the user can overwrite           #

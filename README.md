@@ -2,7 +2,7 @@
 
 ## RELEASE
 
-OpenARC V0.75 (April 14, 2023)
+OpenARC V0.8 (September 22, 2024)
 
 Open Accelerator Research Compiler (OpenARC) is a framework built on top of 
 the Cetus compiler infrastructure (http://cetus.ecn.purdue.edu), which is 
@@ -241,6 +241,10 @@ when targeting IRIS devices.
 
         if iris_all, submit a IRIS task to all devices but only the first available device executes the task.
 			Choose this option to enable IRIS's automatic workload partitioning capability, which automatically splits an IRIS task to multiple, independent sub-tasks if the original task consists of affine access patterns only.
+- Environment variable, `OPENARCRT_IRIS_DMEM`, is used to decide whether to use IRIS DMEM or not when targeting IRIS devices.
+        if 0, use IRIS MEM objects instead of DMEM objects.
+
+        if 1, use IRIS DMEM objects (default).
 
 - Environment variable, `OPENARCRT_USE_BRISBANE`, is used to use the deprecated Brisbane runtime, instead of the 
 new IRIS runtime.
@@ -282,6 +286,14 @@ when targeting Brisbane devices. This variable is enabled only when `OPENARCRT_U
         if 0, the host memory involved in asynchrnous memory transfers is pinned only when first accessed by the HI_memcpy_async API (default).
 
         if 1, the OpenARC runtime always pre-pins the host memory when its corresponding device mmemory is allocated. 
+
+- Environment variable, `OPENARC_VICTIM_CACHE_MODE`, is used to set the mode of the victim caching optimization.
+        if 0, the victim cache is disabled.
+
+        if 1, the victim cache stores freed device memory, which can be reused if the size matches. (default)
+
+        if 2, the victim cache stores both pinned host memory and corresponding device memory, which are reused only for the same host pointer, saving both memory pinning cost and device memory allocation cost.
+
 
 - To run some examples in "test" directory, environment variable, `openarc`,
 should be set to the root directory of this OpenARC package (the directory
@@ -356,6 +368,10 @@ To JIT-compile the kernel file, be sure to delete any old kernel binary (openarc
 ## FEATURES/UPDATES
 
 - New features
+	- Add a new environment variable, `OPENARC_VICTIM_CACHE_MODE` to control the victim cache mode.
+
+	- Add a new environment variable, `OPENARCRT_IRIS_DMEM` to control the type of IRIS memory objects when targeting the IRIS device.
+
 	- Add a new command-line option, enableOpenCLArrayFlattening, which enables the OpenCL array flattening transformation.
 
 	- Add a new IRIS driver, which replaces the old Brisbane driver. You can download the new IRIS runtime from the GitHub (https://github.com/ornl/iris).
@@ -416,6 +432,8 @@ To JIT-compile the kernel file, be sure to delete any old kernel binary (openarc
     - Update CUDA runtime to allow intermixing of both OpenACC and CUDA. (See example in [openarc-path]/test/examples/openarc/matmul_openacc_cuda)
 
 - Bug fixes and improvements
+	- Fixed bugs in the device memory handler management to accept general handler types.
+
 	- Fixed bugs in the OpenMP annotation parser.
 
 	- Fixed bugs in the ACC2OpenCLTranslator pass regarding handling acc update directives. 

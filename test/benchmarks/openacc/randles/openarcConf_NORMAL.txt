@@ -389,6 +389,7 @@ defaultNumWorkers=32
 # Misc. Cetus configururation #
 ###############################
 #outdir=cetus_output
+#macro=DUMMY=1,VERIFICATION=1,NSTEPS=__inputSize__,REORDER=__reorder__,_DTYPE=float
 macro=DUMMY=1,VERIFICATION=1,NSTEPS=__inputSize__,REORDER=__reorder__
 #dump-options
 #dump-system-options

@@ -12,6 +12,40 @@
 #include <string>
 #include <unistd.h>
 
+#if defined(OPENARC_ARCH) && OPENARC_ARCH == 5
+#include <hip/hip_runtime.h>
+#define MEM_HANDLE_TYPE void*
+#endif
+
+#if defined(OPENARC_ARCH) && OPENARC_ARCH == 6
+#if defined(OPENARCRT_USE_BRISBANE) && OPENARCRT_USE_BRISBANE == 1
+#include <brisbane/brisbane_runtime.h>
+#define MEM_HANDLE_TYPE brisbane_mem
+#elif defined(OPENARCRT_USE_BRISBANE) && OPENARCRT_USE_BRISBANE == 2
+#include <iris/brisbane_runtime.h>
+#define MEM_HANDLE_TYPE brisbane_mem
+#else
+#include <iris/iris_runtime.h>
+#define MEM_HANDLE_TYPE iris_mem
+#endif
+#endif
+
+#if !defined(OPENARC_ARCH) || OPENARC_ARCH == 0
+#include <cuda_runtime.h>
+#include <cuda.h>
+#define MEM_HANDLE_TYPE void*
+#endif
+
+#if defined(OPENARC_ARCH) && OPENARC_ARCH != 0 && OPENARC_ARCH != 5 && OPENARC_ARCH != 6
+#define CL_TARGET_OPENCL_VERSION 120
+#ifdef __APPLE__
+#include <OpenCL/opencl.h>
+#else
+#include <CL/cl.h>
+#endif
+#define MEM_HANDLE_TYPE cl_mem
+#endif
+
 #ifdef _OPENMP
 #include <omp.h>
 #else
@@ -51,7 +85,9 @@
 //  - If OPENARCRT_PREPINHOSTMEM is set to 0, reuse only device memory.
 //
 //For OpenCL devices, VICTIM_CACHE_MODE = 1 is always applied.
+#if !defined(VICTIM_CACHE_MODE)
 #define VICTIM_CACHE_MODE 1
+#endif
 
 //PRESENT_TABLE_SEARCH_MODE = 0
 //	- Assume that the elements in the container follow a strict order at all times
@@ -111,9 +147,15 @@ typedef enum {
 } HI_datatype_t;
 
 typedef struct _HI_device_mem_handle_t {
-    void* basePtr;
+    MEM_HANDLE_TYPE memHandle;
     size_t offset;
 } HI_device_mem_handle_t;
+
+typedef struct _memhandletable_entity_t {
+    MEM_HANDLE_TYPE memHandle;
+    size_t size;
+    _memhandletable_entity_t(MEM_HANDLE_TYPE _memHandle, size_t _size) : memHandle(_memHandle), size(_size) {}
+} memhandletable_entity_t;
 
 typedef struct _addresstable_entity_t {
     void* basePtr;
@@ -121,6 +163,8 @@ typedef struct _addresstable_entity_t {
     _addresstable_entity_t(void* _basePtr, size_t _size) : basePtr(_basePtr), size(_size) {}
 } addresstable_entity_t;
 
+typedef std::map<const void *, memhandletable_entity_t *> memhandlemap_t;
+typedef std::map<int, memhandlemap_t *> memhandletable_t;
 typedef std::map<const void *, void *> addressmap_t;
 typedef std::map<int, addressmap_t *> addresstable_t;
 typedef std::multimap<int, const void *> asyncfreetable_t;
@@ -181,10 +225,10 @@ public:
 	addresstablemap_t masterAddressTableMap;
 
 	//device-address-to-memory-handle mapping table, which is needed
-	//for OpenCL backend only.
+	//for OpenCL backend and IRIS backend only.
 	//Current implementation uses a fake device virtual address for OpenCL,
 	//which should be translated to actual cl_mem handle.
-	addresstable_t masterHandleTable;
+	memhandletable_t masterHandleTable;
 
     //Auxiliary Host-device address mapping table used as a victim cache. 
     addresstable_t auxAddressTable;
@@ -204,6 +248,9 @@ public:
 	asynctempfreetablemap2_t postponedTempFreeTableMap2;
 	//memPool_t memPool;
 	memPoolmap_t memPoolMap;
+#if defined(OPENARC_ARCH) && OPENARC_ARCH == 6
+	memPoolmap_t tempMemPoolMap;
+#endif
 	memPoolSizemap_t tempMallocSizeMap;
 #ifdef _OPENARC_PROFILE_
 	presenttablecnt_t presentTableCntMap;
@@ -793,7 +840,7 @@ public:
 #endif
     	addresstable_t *masterAddressTable = masterAddressTableMap[tid];
 		memPool_t *memPool = memPoolMap[tid];
-    	addressmap_t *myHandleMap = masterHandleTable[tid];
+    	memhandlemap_t *myHandleMap = masterHandleTable[tid];
         fprintf(stderr, "[OPENARCRT-INFO]\t\t\tHost-to-device-address mapping table entries for host thread %d (org. thread ID = %d)\n", tid, org_tid);
         fprintf(stderr, "                \t\t\tHostPtr\tDevPtr\n");
         for (addresstable_t::iterator it = masterAddressTable->begin(); it != masterAddressTable->end(); ++it) {
@@ -803,12 +850,14 @@ public:
         		fprintf(stderr, "                \t\t\t%lx\t%lx\n", (unsigned long)it2->first, (unsigned long)aet->basePtr);
 			}
 		}
+#if !defined(OPENARC_ARCH) || OPENARC_ARCH != 6
         fprintf(stderr, "[OPENARCRT-INFO]\t\t\tDevPtr-to-MemHandle mapping table entries for host thread %d (org. thread ID = %d)\n", tid, org_tid);
         fprintf(stderr, "                \t\t\tDevPtr\tMemHandle\n");
-		for(addressmap_t::iterator it = myHandleMap->begin(); it != myHandleMap->end(); ++it ) {
-            addresstable_entity_t *aet = (addresstable_entity_t*) it->second;
-        	fprintf(stderr, "                \t\t\t%lx\t%lx\n", (unsigned long)it->first, (unsigned long)aet->basePtr);
+		for(memhandlemap_t::iterator it = myHandleMap->begin(); it != myHandleMap->end(); ++it ) {
+            memhandletable_entity_t *aet = (memhandletable_entity_t*) it->second;
+        	fprintf(stderr, "                \t\t\t%lx\t%lx\n", (unsigned long)it->first, (unsigned long)aet->memHandle);
 		}
+#endif
         fprintf(stderr, "[OPENARCRT-INFO]\t\t\tDevPtr in the memory pool for host thread %d( org. thread ID = %d)\n", tid, org_tid);
         fprintf(stderr, "                \t\t\tDevPtr\n");
         for (memPool_t::iterator it = memPool->begin(); it != memPool->end(); ++it) {
@@ -1583,11 +1632,11 @@ public:
 		return  HI_success;
     }
 
-    HI_error_t HI_get_device_mem_handle(const void *devPtr, HI_device_mem_handle_t *memHandle, int tid) {
-    	return HI_get_device_mem_handle(devPtr, memHandle, NULL, tid);
+    HI_error_t HI_get_device_mem_handle(const void *devPtr, HI_device_mem_handle_t *memoryHandle, int tid) {
+    	return HI_get_device_mem_handle(devPtr, memoryHandle, NULL, tid);
 	}
 
-    HI_error_t HI_get_device_mem_handle(const void *devPtr, HI_device_mem_handle_t *memHandle, size_t *size, int tid) {
+    HI_error_t HI_get_device_mem_handle(const void *devPtr, HI_device_mem_handle_t *memoryHandle, size_t *size, int tid) {
 		bool returnReady = false;
 		HI_error_t returnValue = HI_error;
 		int org_tid = tid;
@@ -1607,11 +1656,11 @@ public:
 			fprintf(stderr, "[OPENARCRT-INFO]\tenter HI_get_device_mem_handle(thread ID = %d, org. thread ID = %d)\n", tid, org_tid);
 		}
 #endif
-    	addressmap_t *myHandleMap = masterHandleTable[tid];
+    	memhandlemap_t *myHandleMap = masterHandleTable[tid];
 #if PRESENT_TABLE_SEARCH_MODE == 0
 		//Check whether devPtr exists as an entry to myHandleMap, 
 		//which will be true if devPtr is a base address of the pointed memory.
-        addressmap_t::iterator it2 =	myHandleMap->find(devPtr);
+        memhandlemap_t::iterator it2 =	myHandleMap->find(devPtr);
 #ifdef _OPENARC_PROFILE_
 		presenttablecnt_t::iterator ptit = presentTableCntMap.find(tid);
     	if( HI_openarcrt_verbosity > 1 ) {
@@ -1622,9 +1671,9 @@ public:
     	}    
 #endif
         if(it2 != myHandleMap->end() ) {
-            addresstable_entity_t *aet = (addresstable_entity_t*) it2->second;
-            memHandle->basePtr = aet->basePtr;
-            memHandle->offset = 0;
+            memhandletable_entity_t *aet = (memhandletable_entity_t*) it2->second;
+            memoryHandle->memHandle = aet->memHandle;
+            memoryHandle->offset = 0;
 			if( size != NULL ) {
 				*size = aet->size;
 			}
@@ -1636,17 +1685,17 @@ public:
 		if( !returnReady ) {
 		//Check whether devPtr is within the range of an allocated memory region 
 		//in the addressTable.
-		for (addressmap_t::iterator it2 = myHandleMap->begin(); it2 != myHandleMap->end(); ++it2) {
+		for (memhandlemap_t::iterator it2 = myHandleMap->begin(); it2 != myHandleMap->end(); ++it2) {
             const void* aet_devPtr = it2->first;
-            addresstable_entity_t *aet = (addresstable_entity_t*) it2->second;
+            memhandletable_entity_t *aet = (memhandletable_entity_t*) it2->second;
 #ifdef _OPENARC_PROFILE_
     		if( HI_openarcrt_verbosity > 1 ) {
 				ptit->second++;
     		}    
 #endif
             if (devPtr >= aet_devPtr && (size_t) devPtr < (size_t) aet_devPtr + aet->size) {
-                memHandle->basePtr = aet->basePtr;
-                memHandle->offset = (size_t) devPtr - (size_t) aet_devPtr;
+                memoryHandle->memHandle = aet->memHandle;
+                memoryHandle->offset = (size_t) devPtr - (size_t) aet_devPtr;
 				if( size != NULL ) {
 					*size = aet->size;
 				}
@@ -1660,7 +1709,7 @@ public:
 #else
 		//Check whether devPtr exists as an entry to myHandleMap, 
 		//which will be true if devPtr is a base address of the pointed memory.
-        addressmap_t::iterator it2 =	myHandleMap->lower_bound(devPtr);
+        memhandlemap_t::iterator it2 =	myHandleMap->lower_bound(devPtr);
 #ifdef _OPENARC_PROFILE_
 		presenttablecnt_t::iterator ptit = presentTableCntMap.find(tid);
     	if( HI_openarcrt_verbosity > 1 ) {
@@ -1673,9 +1722,9 @@ public:
         if(it2 != myHandleMap->end() ) {
 			if( it2->first == devPtr ) {
 				//found the entry matching the key, devPtr.
-            	addresstable_entity_t *aet = (addresstable_entity_t*) it2->second;
-            	memHandle->basePtr = aet->basePtr;
-            	memHandle->offset = 0;
+            	memhandletable_entity_t *aet = (memhandletable_entity_t*) it2->second;
+            	memoryHandle->memHandle = aet->memHandle;
+            	memoryHandle->offset = 0;
 				if( size != NULL ) {
 					*size = aet->size;
 				}
@@ -1686,8 +1735,8 @@ public:
 				//devPtr may belong to an entry before the current one.
 				if( it2 == myHandleMap->begin() ) {
 					//There is no entry before the current one.
-					memHandle->basePtr = NULL;
-					memHandle->offset = 0;
+					memoryHandle->memHandle = {};
+					memoryHandle->offset = 0;
 					if( size != NULL ) {
 						*size = 0;
 					}
@@ -1697,10 +1746,10 @@ public:
 				} else {
 					--it2; 
             		const void* aet_devPtr = it2->first;
-            		addresstable_entity_t *aet = (addresstable_entity_t*) it2->second;
+            		memhandletable_entity_t *aet = (memhandletable_entity_t*) it2->second;
             		if (devPtr >= aet_devPtr && (size_t) devPtr < (size_t) aet_devPtr + aet->size) {
-                		memHandle->basePtr = aet->basePtr;
-                		memHandle->offset = (size_t) devPtr - (size_t) aet_devPtr;
+                		memoryHandle->memHandle = aet->memHandle;
+                		memoryHandle->offset = (size_t) devPtr - (size_t) aet_devPtr;
 						if( size != NULL ) {
 							*size = aet->size;
 						}
@@ -1712,12 +1761,12 @@ public:
 			}
 		} else if( !myHandleMap->empty() ) {
 			//devPtr may belong to the last entry.
-        	addressmap_t::reverse_iterator it3 = myHandleMap->rbegin();
+        	memhandlemap_t::reverse_iterator it3 = myHandleMap->rbegin();
             const void* aet_devPtr = it3->first;
-            addresstable_entity_t *aet = (addresstable_entity_t*) it3->second;
+            memhandletable_entity_t *aet = (memhandletable_entity_t*) it3->second;
             if (devPtr >= aet_devPtr && (size_t) devPtr < (size_t) aet_devPtr + aet->size) {
-            	memHandle->basePtr = aet->basePtr;
-                memHandle->offset = (size_t) devPtr - (size_t) aet_devPtr;
+            	memoryHandle->memHandle = aet->memHandle;
+                memoryHandle->offset = (size_t) devPtr - (size_t) aet_devPtr;
 				if( size != NULL ) {
 					*size = aet->size;
 				}
@@ -1730,8 +1779,8 @@ public:
 
 		if( !returnReady ) {
         	//fprintf(stderr, "[ERROR in get_device_mem_handle()] No mapping found for the device pointer\n");
-			memHandle->basePtr = NULL;
-			memHandle->offset = 0;
+			memoryHandle->memHandle = {};
+			memoryHandle->offset = 0;
 			if( size != NULL ) {
 				*size = 0;
 			}
@@ -1754,7 +1803,7 @@ public:
         return returnValue;
     }
 
-    HI_error_t HI_set_device_mem_handle(const void *devPtr, void * handle, size_t size, int tid) {
+    HI_error_t HI_set_device_mem_handle(const void *devPtr, MEM_HANDLE_TYPE handle, size_t size, int tid) {
 		int org_tid = tid;
 #ifdef _USE_SHARED_PRESENT_TABLE
 		tid = 0;
@@ -1772,11 +1821,10 @@ public:
 			fprintf(stderr, "[OPENARCRT-INFO]\tenter HI_set_device_mem_handle(thread ID = %d, org. thread ID = %d)\n", tid, org_tid);
 		}
 #endif
-    	addressmap_t *myHandleMap = masterHandleTable[tid];
+    	memhandlemap_t *myHandleMap = masterHandleTable[tid];
         //fprintf(stderr, "[in set_device_mem_handle()] Setting address\n");
-        addresstable_entity_t *aet = new addresstable_entity_t(handle, size);
-        (*myHandleMap)[devPtr] = (void*) aet;
-        //myHandleMap->insert(std::pair<const void*, void*>(devPtr, (void*) aet));
+        memhandletable_entity_t *aet = new memhandletable_entity_t(handle, size);
+        (*myHandleMap)[devPtr] = aet;
 #ifdef _OPENARC_PROFILE_
 		presenttablecnt_t::iterator ptit = presentTableCntMap.find(tid);
     	if( HI_openarcrt_verbosity > 1 ) {
@@ -1823,8 +1871,8 @@ public:
 			fprintf(stderr, "[OPENARCRT-INFO]\tenter HI_remove_device_mem_handle(thread ID = %d, org. thread ID = %d)\n", tid, org_tid);
 		}
 #endif
-    	addressmap_t *myHandleMap = masterHandleTable[tid];
-        addressmap_t::iterator it2 = myHandleMap->find(devPtr);
+    	memhandlemap_t *myHandleMap = masterHandleTable[tid];
+        memhandlemap_t::iterator it2 = myHandleMap->find(devPtr);
 #ifdef _OPENARC_PROFILE_
 		presenttablecnt_t::iterator ptit = presentTableCntMap.find(tid);
     	if( HI_openarcrt_verbosity > 1 ) {
@@ -1840,7 +1888,7 @@ public:
 		}
 #endif
         if(it2 != myHandleMap->end() ) {
-            addresstable_entity_t *aet = (addresstable_entity_t*) it2->second;
+            memhandletable_entity_t *aet = (memhandletable_entity_t*) it2->second;
             delete aet;
             myHandleMap->erase(it2);
             //return  HI_success;

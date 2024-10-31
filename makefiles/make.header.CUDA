@@ -3,7 +3,7 @@
 # environment.                                                     #
 # (Example settings can be found in the "Set the target system"    #
 #  section below.)                                                 # 
-#   - Set OPENARCLIB to the path to openarcrt directory.           #
+#   - Set OPENARC_INSTALL_ROOT to the OpenARC install directory.   #
 #       - Set OPENARC_ARCH to 0 if targeting CUDA GPUs             #
 #                         1 if targeting OpenCL devices            #
 #                         2 if targeting OpenCL for Xeon Phi       #
@@ -104,8 +104,10 @@
 ###################
 # OpenARC Setting #
 ###################
-OPENARCLIB ?= $(openarc)/openarcrt
-OPENARCINCLUDE ?= $(openarc)/openarcrt
+OPENARC_INSTALL_ROOT ?= $(openarc)/install
+OPENARCLIB = $(OPENARC_INSTALL_ROOT)/lib
+OPENARCINCLUDE = $(OPENARC_INSTALL_ROOT)/include
+OPENARCBIN = $(OPENARC_INSTALL_ROOT)/bin
 CETUS_OUTPUT = cetus_output
 
 ########################################################################

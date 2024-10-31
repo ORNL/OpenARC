@@ -79,7 +79,7 @@ TARGET_MAKE_HEADER = make.header.$(TARGET_SYSTEM)
 
 INSTALL_PREFIX ?= $(shell echo $(PWD))/install
 
-build: compile runtime
+build: compile runtime install
 
 check: 
 	@if [ ! -d "$(openarc)" ]; then echo "[ERROR] environment variable, openarc should be set to the root directory of the OpenARC repository (e.g., export openarc=$(PWD)); exit!"; exit 1; fi
@@ -95,9 +95,9 @@ install:
 	mkdir -p $(INSTALL_PREFIX)/include
 	mkdir -p $(INSTALL_PREFIX)/bin
 	mkdir -p $(INSTALL_PREFIX)/lib
-	echo '#! /bin/sh' > $(INSTALL_PREFIX)/bin/openarc
-	echo 'java -cp $(INSTALL_PREFIX)/lib/antlr.jar:$(INSTALL_PREFIX)/lib/cetus.jar -Xmx1g openacc.exec.ACC2GPUDriver $$*' >> $(INSTALL_PREFIX)/bin/openarc
-	chmod 755 $(INSTALL_PREFIX)/bin/openarc
+	echo '#! /bin/sh' > $(INSTALL_PREFIX)/bin/openarc.sh
+	echo 'java -cp $(INSTALL_PREFIX)/lib/antlr.jar:$(INSTALL_PREFIX)/lib/cetus.jar -Xmx1g openacc.exec.ACC2GPUDriver $$*' >> $(INSTALL_PREFIX)/bin/openarc.sh
+	chmod 755 $(INSTALL_PREFIX)/bin/openarc.sh
 	if [ -f ./bin/binBuilder_cuda ]; then cp ./bin/binBuilder_cuda $(INSTALL_PREFIX)/bin/; fi
 	if [ -f ./bin/binBuilder_hip ]; then cp ./bin/binBuilder_hip $(INSTALL_PREFIX)/bin/; fi
 	if [ -f ./bin/binBuilder_iris ]; then cp ./bin/binBuilder_iris $(INSTALL_PREFIX)/bin/; fi
@@ -139,12 +139,11 @@ install:
 	cp -f ./make.header $(INSTALL_PREFIX)/
 	cp -f ./make.template $(INSTALL_PREFIX)/
 	@echo "==> Set the following environment variables for proper make configuration."
-	@echo "export OPENARCLIB=$(INSTALL_PREFIX)/lib"
-	@echo "export OPENARCINCLUDE=$(INSTALL_PREFIX)/include"
+	@echo "export OPENARC_INSTALL_ROOT=$(INSTALL_PREFIX)"
 
 uninstall:
 	@echo "==> Uninnstall OpenARC files"
-	rm -f $(INSTALL_PREFIX)/bin/openarc
+	rm -f $(INSTALL_PREFIX)/bin/openarc.sh
 	rm -f $(INSTALL_PREFIX)/bin/binBuilder_*
 	rm -f $(INSTALL_PREFIX)/lib/libopenaccrt*
 	rm -f $(INSTALL_PREFIX)/lib/libomphelper.a

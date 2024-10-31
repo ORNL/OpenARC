@@ -1,4 +1,5 @@
-include ../../../../make.header
+OPENARC_INSTALL_ROOT ?= $(openarc)/install
+include $(OPENARC_INSTALL_ROOT)/make.header
 
 ########################
 # Set the program name #

@@ -1,4 +1,5 @@
-include ../../../../make.header
+OPENARC_INSTALL_ROOT ?= $(openarc)/install
+include $(OPENARC_INSTALL_ROOT)/make.header
 
 ########################
 # Set the program name #
@@ -82,4 +83,4 @@ AOCL_FLAGS ?= -v -c -report
 ################################################
 #TARGET ?= ./bin
 
-include ../../../../make.template
+include $(OPENARC_INSTALL_ROOT)/make.template

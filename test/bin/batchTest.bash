@@ -46,9 +46,15 @@ fi
 SKIP_LIST=( )
 
 
-if [ "$openarc" = "" ] || [ ! -d "$openarc" ]; then
-    echo "Environment variable, openarc, should be set up correctly to run this script; exit."
-    exit
+if [ "${OPENARC_INSTALL_ROOT}" = "" ] || [ ! -d "${OPENARC_INSTALL_ROOT}" ]; then
+	if [ "$openarc" = "" ] || [ ! -d "$openarc/install" ]; then
+    	echo "Environment variable, openarc, should be set up correctly to run this script; exit."
+    	exit
+	else
+		INSTALL_ROOT=${openarc}/install
+	fi
+else
+	INSTALL_ROOT=${OPENARC_INSTALL_ROOT}
 fi
 
 if [ "$OPENARC_ARCH" = "" ]; then
@@ -61,14 +67,13 @@ if [ "$rodinia" = "" ] || [ ! -d "$rodinia" ]; then
     exit
 fi
 
-if [ ! -f "$openarc/lib/cetus.jar" ]; then
+if [ ! -f "${INSTALL_ROOT}/lib/cetus.jar" ]; then
 	echo "Build OpenARC compilter and runtime!"
 	echo ""
 	cd $openarc
-	build.sh clean
-	build.sh bin
-	cd openarcrt
-	batchmake.bash
+	make purge
+	make
+	make install
 	cd $openarc
 fi
 

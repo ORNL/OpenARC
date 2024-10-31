@@ -11,9 +11,19 @@ else
     aspenrt=""
 fi
 
-openarcbenchlib="../../../../openarcrt"
 openarcbenchbin="../../../../test/bin"
-openarclib="../../../../lib"
+
+if [ "${OPENARC_INSTALL_ROOT}" = "" ]; then
+    OPENARC_INSTALL_ROOT=${openarc}/install
+fi
+if [ ! -f "${OPENARC_INSTALL_ROOT}/make.header" ]; then
+    echo "====> Cannot find OpenARC install directory; set environment variable, OPENARC_INSTALL_ROOT properly!"
+    exit
+fi
+
+openarcinc="${OPENARC_INSTALL_ROOT}/include"
+openarclib="${OPENARC_INSTALL_ROOT}/lib"
+openarcbin="${OPENARC_INSTALL_ROOT}/bin"
 
 benchname="cg"
 verLevel=0

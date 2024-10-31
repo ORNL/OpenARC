@@ -2,7 +2,7 @@
 
 ## RELEASE
 
-OpenARC V0.8 (September 22, 2024)
+OpenARC V1.0.0 (November 1, 2024)
 
 Open Accelerator Research Compiler (OpenARC) is a framework built on top of 
 the Cetus compiler infrastructure (http://cetus.ecn.purdue.edu), which is 
@@ -34,9 +34,77 @@ The latest version of OpenARC can be obtained at:
 
 - Build
 
+OpenARC compiler and runtime can be built using either CMake or Make.
+To build OpenARC, environment variable, `OPENARC_ARCH` should be set up to decide the target backend (see the ENVIRONMENT SETUP section below for more detail).
+To compile OpenARC examples, environment variable, `OPENARC_INSTALL_ROOT` should be set up to the OpenARC install directory, and `openarc` should be set up to the root directory of the OpenARC repository (the directory where this file resides).
+(If `OPENARC_INSTALL_ROOT` is not defined, OpenARC will implicitly assume `${openarc}/install` as the install directory.) 
+
+- Build with CMake
+
+OpenARC can be built using standard CMake commands:
+
+Example commands to build for the CUDA backend:
+
+```shell
+$ mkdir build
+$ cd build
+$ cmake .. -DCMAKE_INSTALL_PREFIX=$OPENARC_INSTALL_ROOT \
+           -DCMAKE_CXX_COMPILER=nvcc 
+$ make
+$ make install 
+```
+
+Example commands to build for the CUDA backend with OpenMP on the host:
+
+```shell
+$ mkdir build
+$ cd build
+$ cmake .. -DCMAKE_INSTALL_PREFIX=$OPENARC_INSTALL_ROOT \
+           -DCMAKE_CXX_COMPILER=nvcc \
+           -DOPENARC_ENABLE_OPENMP=ON
+$ make
+$ make install 
+```
+
+Example commands to build for the HIP backend with OpenMP on the host:
+
+```shell
+$ mkdir build
+$ cd build
+$ cmake .. -DCMAKE_INSTALL_PREFIX=$OPENARC_INSTALL_ROOT \
+           -DCMAKE_CXX_COMPILER=hipcc \
+           -DOPENARC_ENABLE_OPENMP=ON
+$ make
+$ make install 
+```
+
+Example commands to build for the OpenCL backend on macOS:
+
+```shell
+$ mkdir build
+$ cd build
+$ cmake .. -DCMAKE_INSTALL_PREFIX=$OPENARC_INSTALL_ROOT \
+           -DCMAKE_CXX_COMPILER=clang++ 
+$ make
+$ make install 
+```
+
+Example commands to build for the IRIS backend:
+
+```shell
+$ mkdir build
+$ cd build
+$ cmake .. -DCMAKE_INSTALL_PREFIX=$OPENARC_INSTALL_ROOT \
+           -DCMAKE_CXX_COMPILER=g++ 
+$ make
+$ make install 
+```
+
+- Build with Make
+
 First, set up the environment variable, `openarc` to the root directory of this OpenARC repository.
 
-The `openarc` environment variable is needed to compile OpenARC runtime and examples unless `OPENARCINCLUDE` and `OPENARCLIB` environment variables are explicitly set to the directories containing OpenARC header files and libraries, respectively. (See outputs from the "make install" command below to explicitly set up `OPENARCINCLUDE` and `OPENARCLIB` environment variables.)
+The `openarc` environment variable is needed to compile OpenARC runtime and examples unless `OPENARC_INSTALL_ROOT` environment variable is explicitly set to the OpenARC install directory containing OpenARC header files and libraries. (See outputs from the "make install" command below to explicitly set up `OPENARC_INSTALL_ROOT` environment variable.)
 
 ```shell
 $ export openarc=$(PWD)
@@ -49,18 +117,18 @@ If you want to build OpenARC from the scratch, delete all the temporary files us
 $ make purge
 ```
 
-Second, create a makefile configuration file, called make.header, for the target
+Second, create a makefile configuration file, called `make.header`, for the target
 platform in the root directory of this repository, by copying and modifying example 
-configurations in the "./makefiles" directory. If you want to use any existing configuration
-file in "./makefiles" without any modification, you can use `TARGET_SYSTEM` option
+configurations in the `./makefiles` directory. If you want to use any existing configuration
+file in `./makefiles` without any modification, you can use `TARGET_SYSTEM` option
 when invoking the make command.
 
 ```shell
 $ make TARGET_SYSTEM=CUDA #to use ./makefiles/make.header.CUDA as it is.  
 ```
 
-If you invoke make without the `TARGET_SYSTEM` option, it will use make.header file in the repository root if existing.
-If make.header does not exist, it will decide which configuration file to use based on the environment variable, 
+If you invoke make without the `TARGET_SYSTEM` option, it will use `make.header` file in the repository root if existing.
+If `make.header` does not exist, it will decide which configuration file to use based on the environment variable, 
 `OPENARC_ARCH`, as shown below:
 
 ```shell
@@ -237,11 +305,12 @@ when targeting IRIS devices.
 
         if iris_random, submit IRIS tasks to devices randomly
 
-        if iris_any, submit a IRIS task to a device with minimal pending tasks.
+        if iris_sdq, submit a IRIS task to a device with the fewest tasks in its queue.
 
-        if iris_all, submit a IRIS task to all devices but only the first available device executes the task.
+        if iris_ftf, submit a IRIS task to all devices but only the first available device executes the task.
 			Choose this option to enable IRIS's automatic workload partitioning capability, which automatically splits an IRIS task to multiple, independent sub-tasks if the original task consists of affine access patterns only.
 - Environment variable, `OPENARCRT_IRIS_DMEM`, is used to decide whether to use IRIS DMEM or not when targeting IRIS devices.
+
         if 0, use IRIS MEM objects instead of DMEM objects.
 
         if 1, use IRIS DMEM objects (default).
@@ -432,6 +501,8 @@ To JIT-compile the kernel file, be sure to delete any old kernel binary (openarc
     - Update CUDA runtime to allow intermixing of both OpenACC and CUDA. (See example in [openarc-path]/test/examples/openarc/matmul_openacc_cuda)
 
 - Bug fixes and improvements
+	- Fixed bugs in the parser to handle version numbers (e.g., 1.2.3) in the attributes.
+
 	- Fixed bugs in the device memory handler management to accept general handler types.
 
 	- Fixed bugs in the OpenMP annotation parser.

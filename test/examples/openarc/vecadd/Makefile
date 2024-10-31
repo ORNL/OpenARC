@@ -1,4 +1,5 @@
-include ../../../../make.header
+OPENARC_INSTALL_ROOT ?= $(openarc)/install
+include $(OPENARC_INSTALL_ROOT)/make.header
 
 ########################
 # Set the program name #
@@ -47,4 +48,4 @@ MODE ?= normal
 ################################################
 #TARGET ?= ./bin
 
-include ../../../../make.template
+include $(OPENARC_INSTALL_ROOT)/make.template

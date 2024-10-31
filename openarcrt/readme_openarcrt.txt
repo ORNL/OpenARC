@@ -1,7 +1,7 @@
 -------------------------------------------------------------------------------
 RELEASE
 -------------------------------------------------------------------------------
-OpenARC Runtime V0.8 (September 22, 2024)
+OpenARC Runtime V1.0.0 (November 1, 2024)
 
 OpenARC Runtime implements APIs used by the output program translated
 by OpenARC.
@@ -19,6 +19,9 @@ REQUIREMENTS
 INSTALLATION
 -------------------------------------------------------------------------------
 * Build
+  - If using CMake, it will build both OpenARC compiler and runtime.
+  - To separately build the OpenARC runtime using Make, refer the following:
+* Build with Make
   - Go to the parent directory, which is a main entry directory of OpenARC.
   - Create a makefile configuration file, called make.header, for the target
 platform, by copying and modifying example configurations in the ./makefiles directory.

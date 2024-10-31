@@ -2357,8 +2357,12 @@ public abstract class OpenCLTranslationTools {
 						//PrintTools.println(aAccess.toString(),0);
 						List<Expression> indices = aAccess.getIndices();
                         Expression index = indices.get(0);
+                        //[DEBUG on Oct. 22, 2024 by Seyong Lee] Change the new Array name to use the new pointer_var.
+                        /*
                         ArrayAccess newAccess = new ArrayAccess(new NameID(symName), new BinaryExpression(index.clone(), BinaryOperator.ADD, new BinaryExpression(leftmostIndex.clone(),
                                 BinaryOperator.MULTIPLY, lengthList.get(0).clone())));
+                        */
+                        ArrayAccess newAccess = new ArrayAccess(pointer_var.clone(), index.clone());
 						aAccess.swapWith(newAccess);
                     }
                 }

@@ -1352,6 +1352,7 @@ attributeList returns [List<Attribute> list]
 
 
 // [Extended by Joel E. Denny to return simple attributes]
+// [Modifiedy by Seyong Lee]
 attribute returns [Attribute spec]
 {spec = null;}
         :
@@ -1369,17 +1370,7 @@ attribute returns [Attribute spec]
         (
             LPAREN
             (
-            ID
-            //|
-            //assignExpr
-            |
-            //epsilon
-            )
-            (
-            //(COMMA assignExpr)*
             expr
-            |
-            //epsilon
             )
             RPAREN
         )?
@@ -3489,6 +3480,8 @@ public void initialize()
       Integer.valueOf(LITERAL___asm));
   literals.put(new ANTLRHashString("__asm__", this),
       Integer.valueOf(LITERAL___asm));
+  literals.put(new ANTLRHashString("__attribute", this),
+      Integer.valueOf(LITERAL___attribute));
   literals.put(new ANTLRHashString("__attribute__", this),
       Integer.valueOf(LITERAL___attribute));
   literals.put(new ANTLRHashString("__OSX_AVAILABLE_STARTING", this),
@@ -3922,8 +3915,13 @@ protected Exponent
         ;
 
 
+//[Extended by Seyong Lee to handle version number (1.2.3)]
 Number
         :
+        ( ( Digit )+ '.' ( Digit )+ '.' (Digit)+ ) => ( Digit )+
+			'.' ( Digit )+ '.' ( Digit)+ 
+			( '.' (Digit)+ )*
+		|
         ( ( Digit )+ ( '.' | 'e' | 'E' ) ) => ( Digit )+
         (
             '.' ( Digit )* ( Exponent )?

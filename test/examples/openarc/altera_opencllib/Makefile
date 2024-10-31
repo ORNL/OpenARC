@@ -1,4 +1,5 @@
-include ../../../../make.header
+OPENARC_INSTALL_ROOT ?= $(openarc)/install
+include $(OPENARC_INSTALL_ROOT)/make.header
 
 ########################
 # Set the program name #
@@ -100,4 +101,4 @@ CLIBS3 = -L ../opencl_lib -l opencl_lib.aoclib
 ################################################
 #TARGET ?= ./bin
 
-include ../../../../make.template
+include $(OPENARC_INSTALL_ROOT)/make.template

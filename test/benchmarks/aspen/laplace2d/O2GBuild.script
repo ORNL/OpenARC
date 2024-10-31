@@ -23,9 +23,19 @@ else
     aspenrt=""
 fi
 
-openarcbenchlib="../../../../openarcrt"
 openarcbenchbin="../../../../test/bin"
-openarclib="../../../../lib"
+
+if [ "${OPENARC_INSTALL_ROOT}" = "" ]; then
+    OPENARC_INSTALL_ROOT=${openarc}/install
+fi
+if [ ! -f "${OPENARC_INSTALL_ROOT}/make.header" ]; then
+    echo "====> Cannot find OpenARC install directory; set environment variable, OPENARC_INSTALL_ROOT properly!"
+    exit
+fi
+
+openarcinc="${OPENARC_INSTALL_ROOT}/include"
+openarclib="${OPENARC_INSTALL_ROOT}/lib"
+openarcbin="${OPENARC_INSTALL_ROOT}/bin"
 
 benchname="laplace2d"
 verLevel=0
@@ -40,9 +50,9 @@ if [ "$aspen_param" != "" ]; then
     rm "openarcConf.txt_tmp"
 fi
 
-if [ "$openarcbenchlib" != "" ]; then
+if [ "$openarcinc" != "" ]; then
     mv "openarcConf.txt" "openarcConf.txt_tmp"
-    cat "openarcConf.txt_tmp" | sed "s|__openarcbenchlib__|${openarcbenchlib}|g" > "openarcConf.txt"
+    cat "openarcConf.txt_tmp" | sed "s|__openarcbenchlib__|${openarcinc}|g" > "openarcConf.txt"
     rm "openarcConf.txt_tmp"
 fi
 

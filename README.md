@@ -35,13 +35,20 @@ The latest version of OpenARC can be obtained at:
 - Build
 
 OpenARC compiler and runtime can be built using either CMake or Make.
-To build OpenARC, environment variable, `OPENARC_ARCH` should be set up to decide the target backend (see the ENVIRONMENT SETUP section below for more detail).
-To compile OpenARC examples, environment variable, `OPENARC_INSTALL_ROOT` should be set up to the OpenARC install directory, and `openarc` should be set up to the root directory of the OpenARC repository (the directory where this file resides).
+To build OpenARC, environment variable, `OPENARC_ARCH` should be set to decide the target backend (see the ENVIRONMENT SETUP section below for more detail).
+To compile OpenARC examples, environment variable, `OPENARC_INSTALL_ROOT` should be set to the OpenARC install directory, and `openarc` should be set to the root directory of the OpenARC repository (the directory where this file resides).
 (If `OPENARC_INSTALL_ROOT` is not defined, OpenARC will implicitly assume `${openarc}/install` as the install directory.) 
 
 - Build with CMake
 
-OpenARC can be built using standard CMake commands:
+OpenARC can be built using standard CMake commands.
+The following optional CMake variables can be used to build OpenARC if necessary:
+
+`OPENARC_ENABLE_OPENMP`: Enable OpenMP for host-side multithreading (default: `OFF`)
+
+`OPENARC_ENABLE_CUDA`: Enable the CUDA runtime for the IRIS backend, which will be implicitly set to `ON` if the IRIS environment variable `IRIS_ARCHS` contains `cuda` (default: `OFF`)  
+
+`OENARC_C_PREPROCESSOR`: set the C preprocessor command for the OpenARC parser (default: `gcc -E -std=c99`)
 
 Example commands to build for the CUDA backend:
 
@@ -245,6 +252,9 @@ It is strongly recommended to explicitly set `OPENARC_ARCH` by users to avoid an
 
   - Check ./openarcrt/openacc.h to find a list of values of ACC_DEVICE_TYPE supported by OpenARC.
 
+- Environment variable, `OPENARC_INSTALL_ROOT` is used to set the install directory.
+(If `OPENARC_INSTALL_ROOT` is not defined, OpenARC will implicitly assume `${openarc}/install` as the install directory.) 
+
 - Environment variable, `OPENARC_JITOPTION`, may be optionally used to pass
 options to the backend runtime compiler (NVCC compiler options for JIT CUDA 
 kernel compilation or clBuildProgram options for JIT OpenCL kernel compilation).
@@ -378,22 +388,22 @@ $ java -classpath=[user_class_path] openacc.exec.ACC2GPUDriver [options] [C file
 
 - The "user_class_path" should include the class paths of Antlr and Cetus.
 "build.sh" and "build.xml" provides a target (bin) that generates a wrapper script
-for OpenARC users; if [openarc-path]/bin/openarc exists, the above command can be shortened as following:
+for OpenARC users; if [openarc-path]/bin/openarc.sh exists, the above command can be shortened as following:
 
 ```shell
-$ [openarc-path]/bin/openarc [options] [C files]
+$ [openarc-path]/bin/openarc.sh [options] [C files]
 ```
 
 - Or, if OpenARC is installed, you can use the wrapper script in the install directory:
 
 ```shell
-$ [openarc-install-prefix]/bin/openarc [options] [C files] 
+$ [openarc-install-root]/bin/openarc.sh [options] [C files] 
 ```
 
 - Use addIncludePath option to pass paths for non-standard header files:
 
 ```shell
-$ [openarc-path]/bin/openarc -addIncludePath=[openarc-runtime-path] [C files]
+$ [openarc-install-root]/bin/openarc.sh -addIncludePath=[openarc-runtime-path] [C files]
 ```
 
 - Use either macro option or "#pragma openarc #define" directive to apply macro definitions to OpenACC/OpenARC annotations; see the LIMITATIONS section.
@@ -403,7 +413,7 @@ $ [openarc-path]/bin/openarc -addIncludePath=[openarc-runtime-path] [C files]
 - Available OpenARC commandline options can be found either in [openarc-path]/test/openarcConf.sample or by running the following command:
 
 ```shell
-$ [openarc-path]/bin/openarc -dump-options
+$ [openarc-install-root]/bin/openarc -dump-options
 ```
 
 - A recommended way to pass commandline options to OpenARC is to use the sample configuration file ([openarc-path]/test/openarcConf.sample)
@@ -412,7 +422,7 @@ $ [openarc-path]/bin/openarc -dump-options
 
 	- Run OpenARC using the gpuConfFile option.
     ```shell
-    $ [openarc-path]/bin/openarc -gpuConfFile=openarcConf.sample [C files]
+    $ [openarc-install-root]/bin/openarc -gpuConfFile=openarcConf.sample [C files]
     ```
 
 
@@ -712,6 +722,6 @@ directives to structured blocks. The two-step parsing may not work if either for
 
 The OpenARC Team
 
-URL: http://ft.ornl.gov/research/openarc
+URL: https://csmd.ornl.gov/project/openarc-open-accelerator-research-compiler
 
 EMAIL: lees2@ornl.gov

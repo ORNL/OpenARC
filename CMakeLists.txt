@@ -10,9 +10,16 @@ find_package(Java COMPONENTS Development REQUIRED)
 set(JAVA_HOME ${JAVA_HOME})
 include(UseJava)
 
+# CMake variables for OpenARC
 option(OPENARC_ENABLE_LLVM "Enable support for the LLVM backend" OFF)
 option(OPENARC_ENABLE_OPENMP "Enable OpenMP for multithreading host" OFF)
 option(OPENARC_ENABLE_CUDA "Enable the CUDA backend" OFF)
+IF(OPENARC_C_PREPROCESSOR)
+set(OPENARC_CPP ${OPENARC_C_PREPROCESSOR})
+ELSE()
+set(OPENARC_CPP "gcc -E -std=c99")
+ENDIF()
+
 
 IF(DEFINED ENV{OPENARC_ARCH})
 set(OPENARC_TARGET_ARCH $ENV{OPENARC_ARCH})
@@ -93,8 +100,6 @@ set(OPENARC_INSTALL_DIR ${PROJECT_SOURCE_DIR}/install)
 ELSE()
 set(OPENARC_INSTALL_DIR ${CMAKE_INSTALL_PREFIX})
 ENDIF()
-
-set(OPENARC_CPP "gcc -E -std=c99")
 
 add_subdirectory(src)
 add_subdirectory(openarcrt)

@@ -343,8 +343,8 @@ public:
     virtual void HI_malloc(void **devPtr, size_t size, HI_MallocKind_t flags, int threadID=NO_THREAD_ID) = 0;
     virtual void HI_free(void *devPtr, int threadID=NO_THREAD_ID) = 0;
 
-	virtual void HI_enter_subregion(const char *label, int threadID=NO_THREAD_ID) {}
-	virtual void HI_exit_subregion(const char *label, int threadID=NO_THREAD_ID) {}
+	virtual void HI_enter_subregion(const char *label, int mode=0, int threadID=NO_THREAD_ID) {}
+	virtual void HI_exit_subregion(const char *label, int mode=0, int threadID=NO_THREAD_ID) {}
 
     HI_error_t HI_get_device_address(const void *hostPtr, void **devPtr, int asyncID, int tid) {
 		size_t offset;
@@ -2315,8 +2315,8 @@ extern HI_error_t HI_destroy_texobj(void *texObj,  const void *devPtr, int threa
 //Misc. functions //
 ////////////////////
 extern double HI_get_localtime();
-extern void HI_enter_subregion(const char *label, int threadID);
-extern void HI_exit_subregion(const char *label, int threadID);
+extern void HI_enter_subregion(const char *label, int mode, int threadID);
+extern void HI_exit_subregion(const char *label, int mode, int threadID);
 
 
 ////////////////////////////////////////////

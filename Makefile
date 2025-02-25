@@ -95,9 +95,12 @@ install:
 	mkdir -p $(INSTALL_PREFIX)/include
 	mkdir -p $(INSTALL_PREFIX)/bin
 	mkdir -p $(INSTALL_PREFIX)/lib
+	if [ -f ./jllvm/jllvm.jar ]; then cp ./jllvm/jllvm.* $(INSTALL_PREFIX)/lib/; cp ./jllvm/libjllvm.* $(INSTALL_PREFIX)/lib/; fi
 	echo '#! /bin/sh' > $(INSTALL_PREFIX)/bin/openarc.sh
-	echo 'java -cp $(INSTALL_PREFIX)/lib/antlr.jar:$(INSTALL_PREFIX)/lib/cetus.jar -Xmx1g openacc.exec.ACC2GPUDriver $$*' >> $(INSTALL_PREFIX)/bin/openarc.sh
+	if [ -f ./jllvm/jllvm.jar ]; then echo 'java -Djava.library.path=$(INSTALL_PREFIX)/lib/ -cp $(INSTALL_PREFIX)/lib/antlr.jar:$(INSTALL_PREFIX)/lib/cetus.jar:$(INSTALL_PREFIX)/lib/jllvm.jar -Xmx1g openacc.exec.ACC2GPUDriver $$*' >> $(INSTALL_PREFIX)/bin/openarc.sh; fi
+	if [ ! -f ./jllvm/jllvm.jar ]; then echo 'java -cp $(INSTALL_PREFIX)/lib/antlr.jar:$(INSTALL_PREFIX)/lib/cetus.jar -Xmx1g openacc.exec.ACC2GPUDriver $$*' >> $(INSTALL_PREFIX)/bin/openarc.sh; fi
 	chmod 755 $(INSTALL_PREFIX)/bin/openarc.sh
+	#if [ -f ./bin/openarc.sh ]; then cp ./bin/openarc.sh $(INSTALL_PREFIX)/bin/; fi
 	if [ -f ./bin/binBuilder_cuda ]; then cp ./bin/binBuilder_cuda $(INSTALL_PREFIX)/bin/; fi
 	if [ -f ./bin/binBuilder_hip ]; then cp ./bin/binBuilder_hip $(INSTALL_PREFIX)/bin/; fi
 	if [ -f ./bin/binBuilder_iris ]; then cp ./bin/binBuilder_iris $(INSTALL_PREFIX)/bin/; fi
@@ -131,6 +134,8 @@ install:
 	cp -f ./openarcrt/openacc.h $(INSTALL_PREFIX)/include/
 	cp -f ./openarcrt/openaccrt.h $(INSTALL_PREFIX)/include/
 	cp -f ./openarcrt/resilience.h $(INSTALL_PREFIX)/include/
+	cp -f ./openarcrt/resilience.cu $(INSTALL_PREFIX)/include/
+	cp -f ./openarcrt/resilience.cl $(INSTALL_PREFIX)/include/
 	cp -f ./openarcrt/omp4_device.h $(INSTALL_PREFIX)/include/
 	cp -f ./openarcrt/omp_helper.h $(INSTALL_PREFIX)/include/
 	cp -f ./openarcrt/mcl_accext.h $(INSTALL_PREFIX)/include/
@@ -154,6 +159,8 @@ uninstall:
 	rm -f $(INSTALL_PREFIX)/include/openacc.h
 	rm -f $(INSTALL_PREFIX)/include/openaccrt.h
 	rm -f $(INSTALL_PREFIX)/include/resilience.h
+	rm -f $(INSTALL_PREFIX)/include/resilience.cu
+	rm -f $(INSTALL_PREFIX)/include/resilience.cl
 	rm -f $(INSTALL_PREFIX)/include/omp4_device.h
 	rm -f $(INSTALL_PREFIX)/include/omp_helper.h
 	rm -f $(INSTALL_PREFIX)/include/mcl_accext.h

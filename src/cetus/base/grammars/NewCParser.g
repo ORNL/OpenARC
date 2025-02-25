@@ -696,33 +696,6 @@ boolean typedefold = false;
         "__nvl_wp__"
 {types = Specifier.NVL_WP;}
 		|
-        "int8_t"
-{types = Specifier.INT8_T;}
-		|
-        "uint8_t"
-{types = Specifier.UINT8_T;}
-		|
-        "int16_t"
-{types = Specifier.INT16_T;}
-		|
-        "uint16_t"
-{types = Specifier.UINT16_T;}
-		|
-        "int32_t"
-{types = Specifier.INT32_T;}
-		|
-        "uint32_t"
-{types = Specifier.UINT32_T;}
-		|
-        "int64_t"
-{types = Specifier.INT64_T;}
-		|
-        "uint64_t"
-{types = Specifier.UINT64_T;}
-		|
-        "size_t"
-{types = Specifier.SIZE_T;}
-		|
         "_Float128"
 {types = Specifier.FLOAT128;}
 		|
@@ -846,33 +819,6 @@ boolean typedefold = false;
 		|
         "__nvl_wp__"
 {types = Specifier.NVL_WP;}
-		|
-        "int8_t"
-{types = Specifier.INT8_T;}
-		|
-        "uint8_t"
-{types = Specifier.UINT8_T;}
-		|
-        "int16_t"
-{types = Specifier.INT16_T;}
-		|
-        "uint16_t"
-{types = Specifier.UINT16_T;}
-		|
-        "int32_t"
-{types = Specifier.INT32_T;}
-		|
-        "uint32_t"
-{types = Specifier.UINT32_T;}
-		|
-        "int64_t"
-{types = Specifier.INT64_T;}
-		|
-        "uint64_t"
-{types = Specifier.UINT64_T;}
-		|
-        "size_t"
-{types = Specifier.SIZE_T;}
 		|
         "_Float128"
 {types = Specifier.FLOAT128;}

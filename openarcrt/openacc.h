@@ -153,7 +153,7 @@ extern void acc_map_data_forced(h_void* hostPtr, d_void* devPtr, size_t size);
 ///////////////////////////////////////////////
 extern int get_thread_id();
 extern void HI_set_context();
-extern void HI_enter_subregion(const char *label);
-extern void HI_exit_subregion(const char *label);
+extern void HI_enter_subregion(const char *label, int mode);
+extern void HI_exit_subregion(const char *label, int mode);
 
 #endif

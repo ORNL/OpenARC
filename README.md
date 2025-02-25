@@ -107,6 +107,17 @@ $ make
 $ make install 
 ```
 
+Example commands to build for the IRIS backend with MPI support (IRISD):
+
+```shell
+$ mkdir build
+$ cd build
+$ cmake .. -DCMAKE_INSTALL_PREFIX=$OPENARC_INSTALL_ROOT \
+           -DCMAKE_CXX_COMPILER=mpicxx 
+$ make
+$ make install 
+```
+
 - Build with Make
 
 First, set up the environment variable, `openarc` to the root directory of this OpenARC repository.
@@ -413,7 +424,7 @@ $ [openarc-install-root]/bin/openarc.sh -addIncludePath=[openarc-runtime-path] [
 - Available OpenARC commandline options can be found either in [openarc-path]/test/openarcConf.sample or by running the following command:
 
 ```shell
-$ [openarc-install-root]/bin/openarc -dump-options
+$ [openarc-install-root]/bin/openarc.sh -dump-options
 ```
 
 - A recommended way to pass commandline options to OpenARC is to use the sample configuration file ([openarc-path]/test/openarcConf.sample)
@@ -422,7 +433,7 @@ $ [openarc-install-root]/bin/openarc -dump-options
 
 	- Run OpenARC using the gpuConfFile option.
     ```shell
-    $ [openarc-install-root]/bin/openarc -gpuConfFile=openarcConf.sample [C files]
+    $ [openarc-install-root]/bin/openarc.sh -gpuConfFile=openarcConf.sample [C files]
     ```
 
 
@@ -451,7 +462,7 @@ To JIT-compile the kernel file, be sure to delete any old kernel binary (openarc
 
 	- Add a new environment variable, `OPENARCRT_IRIS_DMEM` to control the type of IRIS memory objects when targeting the IRIS device.
 
-	- Add a new command-line option, enableOpenCLArrayFlattening, which enables the OpenCL array flattening transformation.
+	- Add a new command-line option, `enableOpenCLArrayFlattening`, which enables the OpenCL array flattening transformation.
 
 	- Add a new IRIS driver, which replaces the old Brisbane driver. You can download the new IRIS runtime from the GitHub (https://github.com/ornl/iris).
 
@@ -465,7 +476,7 @@ To JIT-compile the kernel file, be sure to delete any old kernel binary (openarc
 
 	- Add a new environment variable, `OPENARCRT_BRISBANE_POLICY` to control the task scheduling policy when targeting the Brisbane device.
 
-	- Add new flags: parallelismMappingStrat and fpgaReduction (refer to ./doc/OpenARC_parallelismmapping.txt regarding the parallelismMappingStrat flag)
+	- Add new flags: `parallelismMappingStrat` and `fpgaReduction` (refer to ./doc/OpenARC_parallelismmapping.txt regarding the parallelismMappingStrat flag)
 
 	- Add a new environment variable, `OPENARCRT_MEMORYALIGNMENT` to control dynamic memory alignment functionality.
 

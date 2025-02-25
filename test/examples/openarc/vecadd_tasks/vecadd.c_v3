@@ -3,7 +3,7 @@
 #include <string.h>
 #include "openacc.h"
 
-//#define MERGE_TASKS
+#define MERGE_TASKS
 
 /* Helper function for converting strings to ints, with error checking */
 int StrToInt(const char *token, unsigned int *retVal)

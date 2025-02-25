@@ -1397,7 +1397,7 @@ public class ACCAnalysis extends AnalysisPass
 			Symbol sym = SymbolTools.getSymbolOfName(newName, at);
 			if( sym == null ) {
 				Tools.exit("[ERROR in ACCAnalysis.updateSymbolsInSubArray()] variable, " + newName + 
-						", in the following OpenACC annotatin is not visible in the current scope; " +
+						", in the following OpenACC annotation is not visible in the current scope; " +
 						"please check whether the declaration of the variable is visible.\n" +
 						"OpenACC annotation: " + annot + "\n" + AnalysisTools.getEnclosingAnnotationContext(annot));
 			}

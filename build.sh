@@ -139,12 +139,12 @@ case "$1" in
     classpath="$classpath:$jllvm_jar"
     library_path_opt="-Djava.library.path=$jllvm_libdir"
   fi
-  cat > bin/openarc << EOF
+  cat > bin/openarc.sh << EOF
 #!/bin/sh
 # This file was generated automatically by build.sh.
 java $library_path_opt -cp $classpath -Xmx1g openacc.exec.ACC2GPUDriver \$*
 EOF
-  chmod 755 bin/openarc
+  chmod 755 bin/openarc.sh
   ;;
   check)
   $0 bin || exit 1

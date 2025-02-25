@@ -313,8 +313,10 @@ HI_error_t IrisDriver::init(int threadID) {
   tempMallocSizeMap[thread_id] = new sizemap_t();
   threadAsyncMap[thread_id] = NO_QUEUE;
   //threadTaskMap[thread_id] = NULL;
+  //threadGraphMap[thread_id] = NULL;
   threadAsyncTaskMap[thread_id] = new threadtaskmapiris_t();
   threadTaskMapNesting[thread_id] = 0;
+  threadGraphMapNesting[thread_id] = 0;
   threadHostMemFreeMap[thread_id] = new pointerset_t();
 
   createKernelArgMap(thread_id);
@@ -474,6 +476,7 @@ HI_error_t IrisDriver::HI_kernel_call(std::string kernel_name, size_t gridSize[3
     task_exist = true;
   }
   int nestingLevel = threadTaskMapNesting[threadID];
+  int nestingLevelGR = threadGraphMapNesting[threadID];
   if( !task_exist && (nestingLevel == 0) ) {
     iris_task_create(&task);
   }
@@ -820,6 +823,7 @@ HI_error_t IrisDriver::HI_memcpy(void *dst, const void *src, size_t count, HI_Me
               task_exist = true;
           }
   		  int nestingLevel = threadTaskMapNesting[threadID];
+  		  int nestingLevelGR = threadGraphMapNesting[threadID];
   		  if( !task_exist && (nestingLevel == 0) ) {
         	  iris_task_create(&task);
 		  }
@@ -882,6 +886,7 @@ HI_error_t IrisDriver::HI_memcpy(void *dst, const void *src, size_t count, HI_Me
                 task_exist = true;
             }
   			int nestingLevel = threadTaskMapNesting[threadID];
+  			int nestingLevelGR = threadGraphMapNesting[threadID];
   			if( !task_exist && (nestingLevel == 0) ) {
         		iris_task_create(&task);
 			}
@@ -1111,6 +1116,7 @@ HI_error_t IrisDriver::HI_memcpy_async(void *dst, const void *src, size_t count,
             task_exist = true;
           }
   		  int nestingLevel = threadTaskMapNesting[threadID];
+  		  int nestingLevelGR = threadGraphMapNesting[threadID];
   		  if( !task_exist && (nestingLevel == 0) ) {
         	iris_task_create(&task);
 		  }
@@ -1168,6 +1174,7 @@ HI_error_t IrisDriver::HI_memcpy_async(void *dst, const void *src, size_t count,
                 task_exist = true;
             }
   			int nestingLevel = threadTaskMapNesting[threadID];
+  			int nestingLevelGR = threadGraphMapNesting[threadID];
   			if( !task_exist && (nestingLevel == 0) ) {
         		iris_task_create(&task);
 			}
@@ -1946,7 +1953,9 @@ HI_error_t IrisDriver::createKernelArgMap(int threadID) {
     tempMallocSizeMap[thread_id] = new sizemap_t();
   	threadAsyncMap[threadID] = NO_QUEUE;
   	//threadTaskMap[thread_id] = NULL;
+  	//threadGraphMap[thread_id] = NULL;
   	threadTaskMapNesting[thread_id] = 0;
+  	threadGraphMapNesting[thread_id] = 0;
     threadHostMemFreeMap[thread_id] = new pointerset_t();
   }
 
@@ -1972,6 +1981,7 @@ HI_error_t IrisDriver::HI_bind_texref(std::string texName,  HI_datatype_t type, 
       task_exist = true;
   }
   int nestingLevel = threadTaskMapNesting[threadID];
+  int nestingLevelGR = threadGraphMapNesting[threadID];
   threadtaskmapiris_t *asyncTaskMap = threadAsyncTaskMap[threadID];
   pointerset_t *tmpHostMemSet = threadHostMemFreeMap[threadID];
   if( HI_get_device_mem_handle(devPtr, &tHandle, tconf->threadID) == HI_success ) {
@@ -2164,36 +2174,96 @@ void IrisDriver::HI_wait(int arg, int threadID) {
         fprintf(stderr, "[OPENARCRT-INFO]\t\tenter IrisDriver::HI_wait (arg = %d, thread ID = %d)\n", arg, threadID);
     }
 #endif
+	int err;
 	int nestingLevel = threadTaskMapNesting[threadID];
+	int nestingLevelGR = threadGraphMapNesting[threadID];
 	threadtaskmapiris_t *asyncTaskMap = threadAsyncTaskMap[threadID];
-	if( nestingLevel != 0 ) {
-		fprintf(stderr, "[ERROR in IrisDriver::HI_wait(arg = %d, thread ID = %d)] HI_wait() should not be called inside an IRIS task region (IRIS task region nesting level = %d)\n", arg, threadID, nestingLevel);
-		exit(1); 
-	}
-	HostConf_t * tconf = getHostConf(threadID);
-	if( asyncTaskMap->count(arg) > 0 ) {
+  	iris_graph graph;
+    bool graph_exist = false;
+    if( threadGraphMap.count(threadID) > 0 ) {
+  	    graph = threadGraphMap[threadID];
+        graph_exist = true;
+    }
+	if( graph_exist ) {
+		HostConf_t * tconf = getHostConf(threadID);
+		int num_tasks = iris_graph_tasks_count(graph);
+		if( nestingLevelGR > 0 ) {
+			//Submit a graph if containing tasks.
+			if(num_tasks > 0) {
 #ifdef _OPENARC_PROFILE_
-    	if( HI_openarcrt_verbosity > 2 ) {
-        	fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_wait(arg = %d, thread ID = %d) waits for an IRIS task on async ID = %d\n", arg, threadID, arg);
-    	}    
+    			if( HI_openarcrt_verbosity > 2 ) {
+        			fprintf(stderr, "[OPENARCRT-INFO]\t\tenter IrisDriver::HI_wait (arg = %d, thread ID = %d) submit an IRIS task graph to the device %d\n", arg, threadID, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, 0));
+    			}
 #endif
-		iris_task task = asyncTaskMap->at(arg);
-		iris_task_wait(task);
-		iris_task_release(task);
-		asyncTaskMap->erase(arg);
-		pointerset_t *tmpHostMemSet = threadHostMemFreeMap[threadID];
-		if( !(tmpHostMemSet->empty()) ) {
-			for(std::set<const void *>::iterator it=tmpHostMemSet->begin(); it!=tmpHostMemSet->end(); ++it) {
-				free((void *)*it);
+				err = iris_graph_submit(graph, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, 0), false);
+				if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
 			}
+#ifdef _OPENARC_PROFILE_
+			tconf->BTaskCnt += num_tasks;	
+#endif
+		}
+		if( num_tasks > 0 ) {
+#ifdef _OPENARC_PROFILE_
+    		if( HI_openarcrt_verbosity > 2 ) {
+        		fprintf(stderr, "[OPENARCRT-INFO]\t\tenter IrisDriver::HI_wait (arg = %d, thread ID = %d) wait for the IRIS task graph submitted to the device %d to finish\n", arg, threadID, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, 0));
+    		}
+#endif
+			err = iris_graph_wait(graph);	
+			if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
+		}
+		if( asyncTaskMap->count(arg) > 0 ) {
+			pointerset_t *tmpHostMemSet = threadHostMemFreeMap[threadID];
+			if( !(tmpHostMemSet->empty()) ) {
+				for(std::set<const void *>::iterator it=tmpHostMemSet->begin(); it!=tmpHostMemSet->end(); ++it) {
+					free((void *)*it);
+				}
 				tmpHostMemSet->clear();
+			}
+		}
+		asyncTaskMap->erase(arg);
+		err = iris_graph_release(graph);	
+		if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
+  		threadGraphMap.erase(threadID);
+		if( nestingLevelGR > 0 ) {
+#ifdef _OPENARC_PROFILE_
+    		if( HI_openarcrt_verbosity > 2 ) {
+        	fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_wait (arg = %d, nestlevelGR = %d, thread ID = %d) creates an IRIS task graph\n", arg, nestingLevelGR, threadID);
+    		}
+#endif
+  			iris_graph graph2;
+  			iris_graph_create(&graph2);
+  			threadGraphMap[threadID] = graph2;
 		}
 	} else {
-		fprintf(stderr, "[ERROR in IrisDriver::HI_wait(arg = %d, thread ID = %d)] HI_wait() there is no IRIS task to wait for; exit!\n", arg, threadID);
-		exit(1); 
+		if( nestingLevel != 0 ) {
+			fprintf(stderr, "[ERROR in IrisDriver::HI_wait(arg = %d, thread ID = %d)] HI_wait() should not be called inside an IRIS task region (IRIS task region nesting level = %d)\n", arg, threadID, nestingLevel);
+			exit(1); 
+		}
+		HostConf_t * tconf = getHostConf(threadID);
+		if( asyncTaskMap->count(arg) > 0 ) {
+#ifdef _OPENARC_PROFILE_
+    		if( HI_openarcrt_verbosity > 2 ) {
+        		fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_wait(arg = %d, thread ID = %d) waits for an IRIS task on async ID = %d\n", arg, threadID, arg);
+    		}    
+#endif
+			iris_task task = asyncTaskMap->at(arg);
+			iris_task_wait(task);
+			iris_task_release(task);
+			asyncTaskMap->erase(arg);
+			pointerset_t *tmpHostMemSet = threadHostMemFreeMap[threadID];
+			if( !(tmpHostMemSet->empty()) ) {
+				for(std::set<const void *>::iterator it=tmpHostMemSet->begin(); it!=tmpHostMemSet->end(); ++it) {
+					free((void *)*it);
+				}
+				tmpHostMemSet->clear();
+			}
+		} else {
+			fprintf(stderr, "[ERROR in IrisDriver::HI_wait(arg = %d, thread ID = %d)] HI_wait() there is no IRIS task to wait for; exit!\n", arg, threadID);
+			exit(1); 
+		}
+		HI_postponed_free(arg, tconf->threadID);
+		HI_postponed_tempFree(arg, tconf->acc_device_type_var, tconf->threadID);
 	}
-	HI_postponed_free(arg, tconf->threadID);
-	HI_postponed_tempFree(arg, tconf->acc_device_type_var, tconf->threadID);
 
 #ifdef _OPENARC_PROFILE_
     if( HI_openarcrt_verbosity > 2 ) {
@@ -2208,33 +2278,94 @@ void IrisDriver::HI_wait_ifpresent(int arg, int threadID) {
         fprintf(stderr, "[OPENARCRT-INFO]\t\tenter IrisDriver::HI_wait_ifpresent (arg = %d, thread ID = %d)\n", arg, threadID);
     }
 #endif
+	int err;
 	int nestingLevel = threadTaskMapNesting[threadID];
+	int nestingLevelGR = threadGraphMapNesting[threadID];
 	threadtaskmapiris_t *asyncTaskMap = threadAsyncTaskMap[threadID];
-	if( nestingLevel != 0 ) {
-		fprintf(stderr, "[ERROR in IrisDriver::HI_wait_ifpresent(arg = %d, thread ID = %d)] HI_wait_ifpresent() should not be called inside an IRIS task region (IRIS task region nesting level = %d)\n", arg, threadID, nestingLevel);
-		exit(1); 
-	}
-	HostConf_t * tconf = getHostConf(threadID);
-	if( asyncTaskMap->count(arg) > 0 ) {
+  	iris_graph graph;
+    bool graph_exist = false;
+    if( threadGraphMap.count(threadID) > 0 ) {
+  	    graph = threadGraphMap[threadID];
+        graph_exist = true;
+    }
+	if( graph_exist ) {
+		HostConf_t * tconf = getHostConf(threadID);
+		int num_tasks = iris_graph_tasks_count(graph);
+		if( nestingLevelGR > 0 ) {
+			//Submit a graph if containing tasks.
+			if(num_tasks > 0) {
 #ifdef _OPENARC_PROFILE_
-    	if( HI_openarcrt_verbosity > 2 ) {
-        	fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_wait_ifpresent(arg = %d, thread ID = %d) waits for an IRIS task on async ID = %d\n", arg, threadID, arg);
-    	}    
+    			if( HI_openarcrt_verbosity > 2 ) {
+        			fprintf(stderr, "[OPENARCRT-INFO]\t\tenter IrisDriver::HI_wait_ifpresent (arg = %d, thread ID = %d) submit an IRIS task graph to the device %d\n", arg, threadID, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, 0));
+    			}
 #endif
-		iris_task task = asyncTaskMap->at(arg);
-		iris_task_wait(task);
-		iris_task_release(task);
-		asyncTaskMap->erase(arg);
-		pointerset_t *tmpHostMemSet = threadHostMemFreeMap[threadID];
-		if( !(tmpHostMemSet->empty()) ) {
-			for(std::set<const void *>::iterator it=tmpHostMemSet->begin(); it!=tmpHostMemSet->end(); ++it) {
-				free((void *)*it);
+				err = iris_graph_submit(graph, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, 0), false);
+				if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
 			}
-				tmpHostMemSet->clear();
+#ifdef _OPENARC_PROFILE_
+			tconf->BTaskCnt += num_tasks;	
+#endif
 		}
+		if( num_tasks > 0 ) {
+#ifdef _OPENARC_PROFILE_
+    		if( HI_openarcrt_verbosity > 2 ) {
+        		fprintf(stderr, "[OPENARCRT-INFO]\t\tenter IrisDriver::HI_wait_ifpresent (arg = %d, thread ID = %d) wait for the IRIS task graph submitted to the device %d to finish\n", arg, threadID, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, 0));
+    		}
+#endif
+			err = iris_graph_wait(graph);	
+			if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
+		}
+		if( asyncTaskMap->count(arg) > 0 ) {
+			iris_task task = asyncTaskMap->at(arg);
+			pointerset_t *tmpHostMemSet = threadHostMemFreeMap[threadID];
+			if( !(tmpHostMemSet->empty()) ) {
+				for(std::set<const void *>::iterator it=tmpHostMemSet->begin(); it!=tmpHostMemSet->end(); ++it) {
+					free((void *)*it);
+				}
+				tmpHostMemSet->clear();
+			}
+		}
+		asyncTaskMap->erase(arg);
+		err = iris_graph_release(graph);	
+		if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
+  		threadGraphMap.erase(threadID);
+		if( nestingLevelGR > 0 ) {
+#ifdef _OPENARC_PROFILE_
+    		if( HI_openarcrt_verbosity > 2 ) {
+        	fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_wait_ifpresent (arg = %d, nestlevelGR = %d, thread ID = %d) creates an IRIS task graph\n", arg, nestingLevelGR, threadID);
+    		}
+#endif
+  			iris_graph graph2;
+  			iris_graph_create(&graph2);
+  			threadGraphMap[threadID] = graph2;
+		}
+	} else {
+		if( nestingLevel != 0 ) {
+			fprintf(stderr, "[ERROR in IrisDriver::HI_wait_ifpresent(arg = %d, thread ID = %d)] HI_wait_ifpresent() should not be called inside an IRIS task region (IRIS task region nesting level = %d)\n", arg, threadID, nestingLevel);
+			exit(1); 
+		}
+		HostConf_t * tconf = getHostConf(threadID);
+		if( asyncTaskMap->count(arg) > 0 ) {
+#ifdef _OPENARC_PROFILE_
+    		if( HI_openarcrt_verbosity > 2 ) {
+        		fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_wait_ifpresent(arg = %d, thread ID = %d) waits for an IRIS task on async ID = %d\n", arg, threadID, arg);
+    		}    
+#endif
+			iris_task task = asyncTaskMap->at(arg);
+			iris_task_wait(task);
+			iris_task_release(task);
+			asyncTaskMap->erase(arg);
+			pointerset_t *tmpHostMemSet = threadHostMemFreeMap[threadID];
+			if( !(tmpHostMemSet->empty()) ) {
+				for(std::set<const void *>::iterator it=tmpHostMemSet->begin(); it!=tmpHostMemSet->end(); ++it) {
+					free((void *)*it);
+				}
+				tmpHostMemSet->clear();
+			}
+		}
+		HI_postponed_free(arg, tconf->threadID);
+		HI_postponed_tempFree(arg, tconf->acc_device_type_var, tconf->threadID);
 	}
-	HI_postponed_free(arg, tconf->threadID);
-	HI_postponed_tempFree(arg, tconf->acc_device_type_var, tconf->threadID);
 
 #ifdef _OPENARC_PROFILE_
     if( HI_openarcrt_verbosity > 2 ) {
@@ -2261,27 +2392,92 @@ void IrisDriver::HI_wait_all(int threadID) {
         fprintf(stderr, "[OPENARCRT-INFO]\t\tenter IrisDriver::HI_wait_all (thread ID = %d)\n", threadID);
     }
 #endif
+	int err;
 	int nestingLevel = threadTaskMapNesting[threadID];
+	int nestingLevelGR = threadGraphMapNesting[threadID];
 	threadtaskmapiris_t *asyncTaskMap = threadAsyncTaskMap[threadID];
-	if( nestingLevel != 0 ) {
-		fprintf(stderr, "[ERROR in IrisDriver::HI_wait_all(thread ID = %d)] HI_wait_all() should not be called inside an IRIS task region (IRIS task region nesting level = %d)\n", threadID, nestingLevel);
-		exit(1); 
-	}
-	HostConf_t * tconf = getHostConf(threadID);
-	for( std::map<int, iris_task>::iterator it=asyncTaskMap->begin(); it!=asyncTaskMap->end(); ++it ) {
-		int arg = it->first;
-		iris_task task = it->second;
-		iris_task_wait(task);
-		iris_task_release(task);
+  	iris_graph graph;
+    bool graph_exist = false;
+    if( threadGraphMap.count(threadID) > 0 ) {
+  	    graph = threadGraphMap[threadID];
+        graph_exist = true;
+    }
+	if( graph_exist ) {
+		HostConf_t * tconf = getHostConf(threadID);
+		int num_tasks = iris_graph_tasks_count(graph);
+		if( nestingLevelGR > 0 ) {
+			//Submit a graph if containing tasks.
+			if(num_tasks > 0) {
+#ifdef _OPENARC_PROFILE_
+    			if( HI_openarcrt_verbosity > 2 ) {
+        			fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_wait_all (thread ID = %d) submit an IRIS task graph to the device %d\n", threadID, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, 0));
+    			}
+#endif
+				err = iris_graph_submit(graph, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, 0), false);
+				if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
+			}
+#ifdef _OPENARC_PROFILE_
+			tconf->BTaskCnt += num_tasks;	
+#endif
+		}
+		if( num_tasks > 0 ) {
+#ifdef _OPENARC_PROFILE_
+    		if( HI_openarcrt_verbosity > 2 ) {
+        		fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_wait_all (thread ID = %d) wait for the IRIS task graph submitted to the device %d to finish\n", threadID, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, 0));
+    		}
+#endif
+			err = iris_graph_wait(graph);	
+			if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
+		}
+		for( std::map<int, iris_task>::iterator it=asyncTaskMap->begin(); it!=asyncTaskMap->end(); ++it ) {
+			int arg = it->first;
+			iris_task task = it->second;
+			HI_postponed_free(arg, tconf->threadID);
+			HI_postponed_tempFree(arg, tconf->acc_device_type_var, tconf->threadID);
+		}
+		//[DEBUG on Feb. 3, 2025] Moved out of the the previous loop.
 		pointerset_t *tmpHostMemSet = threadHostMemFreeMap[threadID];
 		if( !(tmpHostMemSet->empty()) ) {
 			for(std::set<const void *>::iterator it=tmpHostMemSet->begin(); it!=tmpHostMemSet->end(); ++it) {
 				free((void *)*it);
 			}
-				tmpHostMemSet->clear();
+			tmpHostMemSet->clear();
 		}
-		HI_postponed_free(arg, tconf->threadID);
-		HI_postponed_tempFree(arg, tconf->acc_device_type_var, tconf->threadID);
+		err = iris_graph_release(graph);	
+		if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
+  		threadGraphMap.erase(threadID);
+		if( nestingLevelGR > 0 ) {
+#ifdef _OPENARC_PROFILE_
+    		if( HI_openarcrt_verbosity > 2 ) {
+        	fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_wait_all (nestlevelGR = %d, thread ID = %d) creates an IRIS task graph\n", nestingLevelGR, threadID);
+    		}
+#endif
+  			iris_graph graph2;
+  			iris_graph_create(&graph2);
+  			threadGraphMap[threadID] = graph2;
+		}
+	} else {
+		if( nestingLevel != 0 ) {
+			fprintf(stderr, "[ERROR in IrisDriver::HI_wait_all(thread ID = %d)] HI_wait_all() should not be called inside an IRIS task region (IRIS task region nesting level = %d)\n", threadID, nestingLevel);
+			exit(1); 
+		}
+		HostConf_t * tconf = getHostConf(threadID);
+		for( std::map<int, iris_task>::iterator it=asyncTaskMap->begin(); it!=asyncTaskMap->end(); ++it ) {
+			int arg = it->first;
+			iris_task task = it->second;
+			iris_task_wait(task);
+			iris_task_release(task);
+			HI_postponed_free(arg, tconf->threadID);
+			HI_postponed_tempFree(arg, tconf->acc_device_type_var, tconf->threadID);
+		}
+		//[DEBUG on Feb. 3, 2025] Moved out of the the previous loop.
+		pointerset_t *tmpHostMemSet = threadHostMemFreeMap[threadID];
+		if( !(tmpHostMemSet->empty()) ) {
+			for(std::set<const void *>::iterator it=tmpHostMemSet->begin(); it!=tmpHostMemSet->end(); ++it) {
+				free((void *)*it);
+			}
+			tmpHostMemSet->clear();
+		}
 	}
 	asyncTaskMap->clear();
 
@@ -2299,47 +2495,107 @@ void IrisDriver::HI_wait_async(int arg, int async, int threadID) {
         fprintf(stderr, "[OPENARCRT-INFO]\t\tenter IrisDriver::HI_wait_async (arg = %d, async ID = %d, thread ID = %d)\n", arg, async, threadID);
     }
 #endif
+	int err;
 	int nestingLevel = threadTaskMapNesting[threadID];
+	int nestingLevelGR = threadGraphMapNesting[threadID];
 	threadtaskmapiris_t *asyncTaskMap = threadAsyncTaskMap[threadID];
-	if( nestingLevel != 0 ) {
-		fprintf(stderr, "[ERROR in IrisDriver::HI_wait_async(arg = %d, async ID = %d, thread ID = %d)] HI_wait_async() should not be called inside an IRIS task region (IRIS task region nesting level = %d)\n", arg, async, threadID, nestingLevel);
-		exit(1); 
-	}
-	HostConf_t * tconf = getHostConf(threadID);
-	if( asyncTaskMap->count(arg) > 0 ) {
+  	iris_graph graph;
+    bool graph_exist = false;
+    if( threadGraphMap.count(threadID) > 0 ) {
+  	    graph = threadGraphMap[threadID];
+        graph_exist = true;
+    }
+	if( graph_exist ) {
+		HostConf_t * tconf = getHostConf(threadID);
+		int num_tasks = iris_graph_tasks_count(graph);
+		if( nestingLevelGR > 0 ) {
+			//Submit a graph if containing tasks.
+			if(num_tasks > 0) {
 #ifdef _OPENARC_PROFILE_
-    	if( HI_openarcrt_verbosity > 2 ) {
-        	fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_wait_async(arg = %d, async ID = %d, thread ID = %d) waits for an IRIS task on async ID = %d\n", arg, async, threadID, arg);
-    	}    
+    			if( HI_openarcrt_verbosity > 2 ) {
+        			fprintf(stderr, "[OPENARCRT-INFO]\t\tenter IrisDriver::HI_wait_async (arg = %d, async ID = %d, thread ID = %d) submit an IRIS task graph to the device %d\n", arg, async, threadID, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, 0));
+    			}
 #endif
-		iris_task task = asyncTaskMap->at(arg);
-		iris_task_wait(task);
-		iris_task_release(task);
-		asyncTaskMap->erase(arg);
-		pointerset_t *tmpHostMemSet = threadHostMemFreeMap[threadID];
-		if( !(tmpHostMemSet->empty()) ) {
-			for(std::set<const void *>::iterator it=tmpHostMemSet->begin(); it!=tmpHostMemSet->end(); ++it) {
-				free((void *)*it);
+				err = iris_graph_submit(graph, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, 0), false);
+				if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
 			}
+#ifdef _OPENARC_PROFILE_
+			tconf->BTaskCnt += num_tasks;	
+#endif
+		}
+		if( num_tasks > 0 ) {
+#ifdef _OPENARC_PROFILE_
+    		if( HI_openarcrt_verbosity > 2 ) {
+        		fprintf(stderr, "[OPENARCRT-INFO]\t\tenter IrisDriver::HI_wait_async (arg = %d, async ID = %d, thread ID = %d) wait for the IRIS task graph submitted to the device %d to finish\n", arg, async, threadID, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, 0));
+    		}
+#endif
+			err = iris_graph_wait(graph);	
+			if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
+		}
+		if( asyncTaskMap->count(arg) > 0 ) {
+			pointerset_t *tmpHostMemSet = threadHostMemFreeMap[threadID];
+			if( !(tmpHostMemSet->empty()) ) {
+				for(std::set<const void *>::iterator it=tmpHostMemSet->begin(); it!=tmpHostMemSet->end(); ++it) {
+					free((void *)*it);
+				}
 				tmpHostMemSet->clear();
+			}
+		}
+		asyncTaskMap->erase(arg);
+		err = iris_graph_release(graph);	
+		if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
+  		threadGraphMap.erase(threadID);
+		if( nestingLevelGR > 0 ) {
+#ifdef _OPENARC_PROFILE_
+    		if( HI_openarcrt_verbosity > 2 ) {
+        	fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_wait_async (arg = %d, async = %d, nestlevelGR = %d, thread ID = %d) creates an IRIS task graph\n", arg, async, nestingLevelGR, threadID);
+    		}
+#endif
+  			iris_graph graph2;
+  			iris_graph_create(&graph2);
+  			threadGraphMap[threadID] = graph2;
 		}
 	} else {
-		fprintf(stderr, "[ERROR in IrisDriver::HI_wait_async(arg = %d, async ID = %d, thread ID = %d)] HI_wait_async() there is no IRIS task to wait for; exit!\n", arg, async, threadID);
-		exit(1); 
-	}
-	HI_postponed_free(arg, tconf->threadID);
-	HI_postponed_tempFree(arg, tconf->acc_device_type_var, tconf->threadID);
-
-	if( asyncTaskMap->count(async) > 0 ) {
+		if( nestingLevel != 0 ) {
+			fprintf(stderr, "[ERROR in IrisDriver::HI_wait_async(arg = %d, async ID = %d, thread ID = %d)] HI_wait_async() should not be called inside an IRIS task region (IRIS task region nesting level = %d)\n", arg, async, threadID, nestingLevel);
+			exit(1); 
+		}
+		HostConf_t * tconf = getHostConf(threadID);
+		if( asyncTaskMap->count(arg) > 0 ) {
 #ifdef _OPENARC_PROFILE_
-    	if( HI_openarcrt_verbosity > 2 ) {
-        	fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_wait_async(arg = %d, async ID = %d, thread ID = %d) waits for an IRIS task on async ID = %d\n", arg, async, threadID, async);
-    	}    
+			if( HI_openarcrt_verbosity > 2 ) {
+				fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_wait_async(arg = %d, async ID = %d, thread ID = %d) waits for an IRIS task on async ID = %d\n", arg, async, threadID, arg);
+			}    
 #endif
-		iris_task task = asyncTaskMap->at(async);
-		iris_task_wait(task);
-		iris_task_release(task);
-		asyncTaskMap->erase(async);
+			iris_task task = asyncTaskMap->at(arg);
+			iris_task_wait(task);
+			iris_task_release(task);
+			asyncTaskMap->erase(arg);
+			pointerset_t *tmpHostMemSet = threadHostMemFreeMap[threadID];
+			if( !(tmpHostMemSet->empty()) ) {
+				for(std::set<const void *>::iterator it=tmpHostMemSet->begin(); it!=tmpHostMemSet->end(); ++it) {
+					free((void *)*it);
+				}
+					tmpHostMemSet->clear();
+			}
+		} else {
+			fprintf(stderr, "[ERROR in IrisDriver::HI_wait_async(arg = %d, async ID = %d, thread ID = %d)] HI_wait_async() there is no IRIS task to wait for; exit!\n", arg, async, threadID);
+			exit(1); 
+		}
+		HI_postponed_free(arg, tconf->threadID);
+		HI_postponed_tempFree(arg, tconf->acc_device_type_var, tconf->threadID);
+
+		if( asyncTaskMap->count(async) > 0 ) {
+#ifdef _OPENARC_PROFILE_
+			if( HI_openarcrt_verbosity > 2 ) {
+				fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_wait_async(arg = %d, async ID = %d, thread ID = %d) waits for an IRIS task on async ID = %d\n", arg, async, threadID, async);
+			}    
+#endif
+			iris_task task = asyncTaskMap->at(async);
+			iris_task_wait(task);
+			iris_task_release(task);
+			asyncTaskMap->erase(async);
+		}
 	}
 
 #ifdef _OPENARC_PROFILE_
@@ -2355,44 +2611,104 @@ void IrisDriver::HI_wait_async_ifpresent(int arg, int async, int threadID) {
         fprintf(stderr, "[OPENARCRT-INFO]\t\tenter IrisDriver::HI_wait_async_ifpresent (arg = %d, async ID = %d, thread ID = %d)\n", arg, async, threadID);
     }
 #endif
+	int err;
 	int nestingLevel = threadTaskMapNesting[threadID];
+	int nestingLevelGR = threadGraphMapNesting[threadID];
 	threadtaskmapiris_t *asyncTaskMap = threadAsyncTaskMap[threadID];
-	if( nestingLevel != 0 ) {
-		fprintf(stderr, "[ERROR in IrisDriver::HI_wait_async_ifpresent(arg = %d, async ID = %d, thread ID = %d)] HI_wait_async_ifpresent() should not be called inside an IRIS task region (IRIS task region nesting level = %d)\n", arg, async, threadID, nestingLevel);
-		exit(1); 
-	}
-	HostConf_t * tconf = getHostConf(threadID);
-	if( asyncTaskMap->count(arg) > 0 ) {
+  	iris_graph graph;
+    bool graph_exist = false;
+    if( threadGraphMap.count(threadID) > 0 ) {
+  	    graph = threadGraphMap[threadID];
+        graph_exist = true;
+    }
+	if( graph_exist ) {
+		HostConf_t * tconf = getHostConf(threadID);
+		int num_tasks = iris_graph_tasks_count(graph);
+		if( nestingLevelGR > 0 ) {
+			//Submit a graph if containing tasks.
+			if(num_tasks > 0) {
 #ifdef _OPENARC_PROFILE_
-    	if( HI_openarcrt_verbosity > 2 ) {
-        	fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_wait_async_ifpresent(arg = %d, async ID = %d, thread ID = %d) waits for an IRIS task on async ID = %d\n", arg, async, threadID, arg);
-    	}    
+    			if( HI_openarcrt_verbosity > 2 ) {
+        			fprintf(stderr, "[OPENARCRT-INFO]\t\tenter IrisDriver::HI_wait_async_ifpresent (arg = %d, async ID = %d, thread ID = %d) submit an IRIS task graph to the device %d\n", arg, async, threadID, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, 0));
+    			}
 #endif
-		iris_task task = asyncTaskMap->at(arg);
-		iris_task_wait(task);
-		iris_task_release(task);
-		asyncTaskMap->erase(arg);
-		pointerset_t *tmpHostMemSet = threadHostMemFreeMap[threadID];
-		if( !(tmpHostMemSet->empty()) ) {
-			for(std::set<const void *>::iterator it=tmpHostMemSet->begin(); it!=tmpHostMemSet->end(); ++it) {
-				free((void *)*it);
+				err = iris_graph_submit(graph, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, 0), false);
+				if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
 			}
-				tmpHostMemSet->clear();
-		}
-	}
-	HI_postponed_free(arg, tconf->threadID);
-	HI_postponed_tempFree(arg, tconf->acc_device_type_var, tconf->threadID);
-
-	if( asyncTaskMap->count(async) > 0 ) {
 #ifdef _OPENARC_PROFILE_
-    	if( HI_openarcrt_verbosity > 2 ) {
-        	fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_wait_async_ifpresent(arg = %d, async ID = %d, thread ID = %d) waits for an IRIS task on async ID = %d\n", arg, async, threadID, async);
-    	}    
+			tconf->BTaskCnt += num_tasks;	
 #endif
-		iris_task task = asyncTaskMap->at(async);
-		iris_task_wait(task);
-		iris_task_release(task);
-		asyncTaskMap->erase(async);
+		}
+		if( num_tasks > 0 ) {
+#ifdef _OPENARC_PROFILE_
+    		if( HI_openarcrt_verbosity > 2 ) {
+        		fprintf(stderr, "[OPENARCRT-INFO]\t\tenter IrisDriver::HI_wait_async_ifpresent (arg = %d, async ID = %d, thread ID = %d) wait for the IRIS task graph submitted to the device %d to finish\n", arg, async, threadID, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, 0));
+    		}
+#endif
+			err = iris_graph_wait(graph);	
+			if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
+		}
+		if( asyncTaskMap->count(arg) > 0 ) {
+			pointerset_t *tmpHostMemSet = threadHostMemFreeMap[threadID];
+			if( !(tmpHostMemSet->empty()) ) {
+				for(std::set<const void *>::iterator it=tmpHostMemSet->begin(); it!=tmpHostMemSet->end(); ++it) {
+					free((void *)*it);
+				}
+				tmpHostMemSet->clear();
+			}
+		}
+		asyncTaskMap->erase(arg);
+		err = iris_graph_release(graph);	
+		if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
+  		threadGraphMap.erase(threadID);
+		if( nestingLevelGR > 0 ) {
+#ifdef _OPENARC_PROFILE_
+    		if( HI_openarcrt_verbosity > 2 ) {
+        	fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_wait_async_ifpresent (arg = %d, async = %d, nestlevelGR = %d, thread ID = %d) creates an IRIS task graph\n", arg, async, nestingLevelGR, threadID);
+    		}
+#endif
+  			iris_graph graph2;
+  			iris_graph_create(&graph2);
+  			threadGraphMap[threadID] = graph2;
+		}
+	} else {
+		if( nestingLevel != 0 ) {
+			fprintf(stderr, "[ERROR in IrisDriver::HI_wait_async_ifpresent(arg = %d, async ID = %d, thread ID = %d)] HI_wait_async_ifpresent() should not be called inside an IRIS task region (IRIS task region nesting level = %d)\n", arg, async, threadID, nestingLevel);
+			exit(1); 
+		}
+		HostConf_t * tconf = getHostConf(threadID);
+		if( asyncTaskMap->count(arg) > 0 ) {
+	#ifdef _OPENARC_PROFILE_
+			if( HI_openarcrt_verbosity > 2 ) {
+				fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_wait_async_ifpresent(arg = %d, async ID = %d, thread ID = %d) waits for an IRIS task on async ID = %d\n", arg, async, threadID, arg);
+			}    
+	#endif
+			iris_task task = asyncTaskMap->at(arg);
+			iris_task_wait(task);
+			iris_task_release(task);
+			asyncTaskMap->erase(arg);
+			pointerset_t *tmpHostMemSet = threadHostMemFreeMap[threadID];
+			if( !(tmpHostMemSet->empty()) ) {
+				for(std::set<const void *>::iterator it=tmpHostMemSet->begin(); it!=tmpHostMemSet->end(); ++it) {
+					free((void *)*it);
+				}
+					tmpHostMemSet->clear();
+			}
+		}
+		HI_postponed_free(arg, tconf->threadID);
+		HI_postponed_tempFree(arg, tconf->acc_device_type_var, tconf->threadID);
+
+		if( asyncTaskMap->count(async) > 0 ) {
+	#ifdef _OPENARC_PROFILE_
+			if( HI_openarcrt_verbosity > 2 ) {
+				fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_wait_async_ifpresent(arg = %d, async ID = %d, thread ID = %d) waits for an IRIS task on async ID = %d\n", arg, async, threadID, async);
+			}    
+	#endif
+			iris_task task = asyncTaskMap->at(async);
+			iris_task_wait(task);
+			iris_task_release(task);
+			asyncTaskMap->erase(async);
+		}
 	}
 
 #ifdef _OPENARC_PROFILE_
@@ -2408,29 +2724,93 @@ void IrisDriver::HI_wait_all_async(int async, int threadID) {
         fprintf(stderr, "[OPENARCRT-INFO]\t\tenter IrisDriver::HI_wait_all_async (async ID = %d, thread ID = %d)\n",async, threadID);
     }
 #endif
+	int err;
 	int nestingLevel = threadTaskMapNesting[threadID];
+	int nestingLevelGR = threadGraphMapNesting[threadID];
 	threadtaskmapiris_t *asyncTaskMap = threadAsyncTaskMap[threadID];
-	if( nestingLevel != 0 ) {
-		fprintf(stderr, "[ERROR in IrisDriver::HI_wait_all_async(async ID = %d, thread ID = %d)] HI_wait_all_async() should not be called inside an IRIS task region (IRIS task region nesting level = %d)\n", async, threadID, nestingLevel);
-		exit(1); 
-	}
-	HostConf_t * tconf = getHostConf(threadID);
-	for( std::map<int, iris_task>::iterator it=asyncTaskMap->begin(); it!=asyncTaskMap->end(); ++it ) {
-		int arg = it->first;
-		iris_task task = it->second;
-		iris_task_wait(task);
-		iris_task_release(task);
+  	iris_graph graph;
+    bool graph_exist = false;
+    if( threadGraphMap.count(threadID) > 0 ) {
+  	    graph = threadGraphMap[threadID];
+        graph_exist = true;
+    }
+	if( graph_exist ) {
+		HostConf_t * tconf = getHostConf(threadID);
+		int num_tasks = iris_graph_tasks_count(graph);
+		if( nestingLevelGR > 0 ) {
+			//Submit a graph if containing tasks.
+			if(num_tasks > 0) {
+#ifdef _OPENARC_PROFILE_
+    			if( HI_openarcrt_verbosity > 2 ) {
+        			fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_wait_all_async (async ID = %d, thread ID = %d) submit an IRIS task graph to the device %d\n", async, threadID, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, 0));
+    			}
+#endif
+				err = iris_graph_submit(graph, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, 0), false);
+				if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
+			}
+#ifdef _OPENARC_PROFILE_
+			tconf->BTaskCnt += num_tasks;	
+#endif
+		}
+		if( num_tasks > 0 ) {
+#ifdef _OPENARC_PROFILE_
+    		if( HI_openarcrt_verbosity > 2 ) {
+        		fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_wait_all_async (async ID = %d, thread ID = %d) wait for the IRIS task graph submitted to the device %d to finish\n", async, threadID, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, 0));
+    		}
+#endif
+			err = iris_graph_wait(graph);	
+			if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
+		}
+		for( std::map<int, iris_task>::iterator it=asyncTaskMap->begin(); it!=asyncTaskMap->end(); ++it ) {
+			int arg = it->first;
+			iris_task task = it->second;
+			HI_postponed_free(arg, tconf->threadID);
+			HI_postponed_tempFree(arg, tconf->acc_device_type_var, tconf->threadID);
+		}
+		//[DEBUG on Feb. 3, 2025] Moved out of the the previous loop.
 		pointerset_t *tmpHostMemSet = threadHostMemFreeMap[threadID];
 		if( !(tmpHostMemSet->empty()) ) {
 			for(std::set<const void *>::iterator it=tmpHostMemSet->begin(); it!=tmpHostMemSet->end(); ++it) {
 				free((void *)*it);
 			}
-				tmpHostMemSet->clear();
+			tmpHostMemSet->clear();
 		}
-		HI_postponed_free(arg, tconf->threadID);
-		HI_postponed_tempFree(arg, tconf->acc_device_type_var, tconf->threadID);
+		err = iris_graph_release(graph);	
+		if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
+  		threadGraphMap.erase(threadID);
+		if( nestingLevelGR > 0 ) {
+#ifdef _OPENARC_PROFILE_
+    		if( HI_openarcrt_verbosity > 2 ) {
+        	fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_all_async_ifpresent (async = %d, nestlevelGR = %d, thread ID = %d) creates an IRIS task graph\n", async, nestingLevelGR, threadID);
+    		}
+#endif
+  			iris_graph graph2;
+  			iris_graph_create(&graph2);
+  			threadGraphMap[threadID] = graph2;
+		}
+	} else {
+		if( nestingLevel != 0 ) {
+			fprintf(stderr, "[ERROR in IrisDriver::HI_wait_all_async(async ID = %d, thread ID = %d)] HI_wait_all_async() should not be called inside an IRIS task region (IRIS task region nesting level = %d)\n", async, threadID, nestingLevel);
+			exit(1); 
+		}
+		HostConf_t * tconf = getHostConf(threadID);
+		for( std::map<int, iris_task>::iterator it=asyncTaskMap->begin(); it!=asyncTaskMap->end(); ++it ) {
+			int arg = it->first;
+			iris_task task = it->second;
+			iris_task_wait(task);
+			iris_task_release(task);
+			pointerset_t *tmpHostMemSet = threadHostMemFreeMap[threadID];
+			if( !(tmpHostMemSet->empty()) ) {
+				for(std::set<const void *>::iterator it=tmpHostMemSet->begin(); it!=tmpHostMemSet->end(); ++it) {
+					free((void *)*it);
+				}
+					tmpHostMemSet->clear();
+			}
+			HI_postponed_free(arg, tconf->threadID);
+			HI_postponed_tempFree(arg, tconf->acc_device_type_var, tconf->threadID);
+		}
+		asyncTaskMap->clear();
 	}
-	asyncTaskMap->clear();
 
 #ifdef _OPENARC_PROFILE_
     if( HI_openarcrt_verbosity > 2 ) {
@@ -2452,6 +2832,7 @@ int IrisDriver::HI_async_test(int asyncId, int threadID) {
     }
 #endif
 	int nestingLevel = threadTaskMapNesting[threadID];
+	int nestingLevelGR = threadGraphMapNesting[threadID];
 	threadtaskmapiris_t *asyncTaskMap = threadAsyncTaskMap[threadID];
 	if( nestingLevel != 0 ) {
 		fprintf(stderr, "[ERROR in IrisDriver::HI_async_test(asyncID = %d, thread ID = %d)] HI_async_test() should not be called inside an IRIS task region (IRIS task region nesting level = %d)\n", asyncID, threadID, nestingLevel);
@@ -2506,40 +2887,57 @@ void IrisDriver::HI_wait_for_events(int async, int num_waits, int* waits, int th
 #endif
 }
 
-void IrisDriver::HI_enter_subregion(const char *label, int threadID) {
+void IrisDriver::HI_enter_subregion(const char *label, int mode, int threadID) {
   	int nestingLevel = threadTaskMapNesting[threadID];
+  	int nestingLevelGR;
 #ifdef _OPENARC_PROFILE_
     if( HI_openarcrt_verbosity > 2 ) {
-        fprintf(stderr, "[OPENARCRT-INFO]\t\tenter IrisDriver::HI_enter_subregion (label = %s, nestlevel = %d, thread ID = %d)\n", label, nestingLevel, threadID);
+        fprintf(stderr, "[OPENARCRT-INFO]\t\tenter IrisDriver::HI_enter_subregion (label = %s, mode = %d, nestlevel = %d, thread ID = %d)\n", label, mode, nestingLevel, threadID);
     }
 #endif
   	iris_task task;
     if( threadTaskMap.count(threadID) > 0 ) {
   	    task = threadTaskMap[threadID];
     }
-	if( nestingLevel == 0 ) {
+	if( mode == 0 ) {
+		if( nestingLevel == 0 ) {
 #ifdef _OPENARC_PROFILE_
-    if( HI_openarcrt_verbosity > 2 ) {
-        fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_enter_subregion (label = %s, nestlevel = %d, thread ID = %d) creates an IRIS task\n", label, nestingLevel, threadID);
-    }
+    		if( HI_openarcrt_verbosity > 2 ) {
+        	fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_enter_subregion (label = %s, mode = %d, nestlevel = %d, thread ID = %d) creates an IRIS task\n", label, mode, nestingLevel, threadID);
+    		}
 #endif
-  		iris_task_create(&task);
-  		threadTaskMap[threadID] = task;
-  		threadAsyncMap[threadID] = NO_QUEUE;
+  			iris_task_create(&task);
+  			threadTaskMap[threadID] = task;
+  			threadAsyncMap[threadID] = NO_QUEUE;
+		}
+		threadTaskMapNesting[threadID] = ++nestingLevel;
+	} else {
+  		nestingLevelGR = threadGraphMapNesting[threadID];
+		if( nestingLevelGR == 0 ) {
+#ifdef _OPENARC_PROFILE_
+    		if( HI_openarcrt_verbosity > 2 ) {
+        	fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_enter_subregion (label = %s, mode = %d, nestlevelGR = %d, thread ID = %d) creates an IRIS task graph\n", label, mode, nestingLevelGR, threadID);
+    		}
+#endif
+  			iris_graph graph;
+  			iris_graph_create(&graph);
+  			threadGraphMap[threadID] = graph;
+		}
+		threadGraphMapNesting[threadID] = ++nestingLevelGR;
 	}
-	threadTaskMapNesting[threadID] = ++nestingLevel;
 #ifdef _OPENARC_PROFILE_
     if( HI_openarcrt_verbosity > 2 ) {
-        fprintf(stderr, "[OPENARCRT-INFO]\t\texit IrisDriver::HI_enter_subregion (label = %s, nestlevel = %d, thread ID = %d)\n", label, nestingLevel, threadID);
+        fprintf(stderr, "[OPENARCRT-INFO]\t\texit IrisDriver::HI_enter_subregion (label = %s, mode =%d, nestlevel = %d, thread ID = %d)\n", label, mode, nestingLevel, threadID);
     }
 #endif
 }
 
-void IrisDriver::HI_exit_subregion(const char *label, int threadID) {
+void IrisDriver::HI_exit_subregion(const char *label, int mode, int threadID) {
   	int nestingLevel = threadTaskMapNesting[threadID];
+  	int nestingLevelGR = threadGraphMapNesting[threadID];
 #ifdef _OPENARC_PROFILE_
     if( HI_openarcrt_verbosity > 2 ) {
-        fprintf(stderr, "[OPENARCRT-INFO]\t\tenter IrisDriver::HI_exit_subregion (label = %s, nestlevel = %d, thread ID = %d)\n", label, nestingLevel, threadID);
+        fprintf(stderr, "[OPENARCRT-INFO]\t\tenter IrisDriver::HI_exit_subregion (label = %s, mode = %d, nestlevel = %d, thread ID = %d)\n", label, mode, nestingLevel, threadID);
     }
 #endif
 	int err;
@@ -2550,184 +2948,249 @@ void IrisDriver::HI_exit_subregion(const char *label, int threadID) {
   	    task = threadTaskMap[threadID];
         task_exist = true;
     }
+  	iris_graph graph;
+    bool graph_exist = false;
+    if( threadGraphMap.count(threadID) > 0 ) {
+  	    graph = threadGraphMap[threadID];
+        graph_exist = true;
+    }
+	if( (nestingLevelGR > 0) && !graph_exist ) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
+
 	threadtaskmapiris_t *asyncTaskMap = threadAsyncTaskMap[threadID];
     pointerset_t *tmpHostMemSet = threadHostMemFreeMap[threadID];
-	nestingLevel--;
-	if( nestingLevel <= 0 ) {
-		if( task_exist ) {
-			int memcpy_cmd_option = 0;
+	if( mode == 0 ) {
+		nestingLevel--;
+		if( nestingLevel <= 0 ) {
+			if( task_exist ) {
+				int memcpy_cmd_option = 0;
 #if OPT_MEMCPY_ONLY_POLICY == 2
-			int d2hmemcpy_cmds_cnt = 0;
-			int h2dmemcpy_cmds_cnt = 0;
-			int ncmds = 0;
-			iris_task_info(task, iris_ncmds, &ncmds, NULL);
-			int *cmds = (int *)malloc(ncmds*sizeof(int));
-			iris_task_info(task, iris_cmds, cmds, NULL);
-			for(int i=0; i<ncmds; i++) {
-				int ctype = cmds[i];
-				if( ctype == IRIS_CMD_D2H ) {
-					d2hmemcpy_cmds_cnt += 1;
-				} else if( ctype == IRIS_CMD_H2D ) {
-					h2dmemcpy_cmds_cnt += 1;
-				} else {
-					break;
+				int d2hmemcpy_cmds_cnt = 0;
+				int h2dmemcpy_cmds_cnt = 0;
+				int ncmds = 0;
+				iris_task_info(task, iris_ncmds, &ncmds, NULL);
+				int *cmds = (int *)malloc(ncmds*sizeof(int));
+				iris_task_info(task, iris_cmds, cmds, NULL);
+				for(int i=0; i<ncmds; i++) {
+					int ctype = cmds[i];
+					if( ctype == IRIS_CMD_D2H ) {
+						d2hmemcpy_cmds_cnt += 1;
+					} else if( ctype == IRIS_CMD_H2D ) {
+						h2dmemcpy_cmds_cnt += 1;
+					} else {
+						break;
+					}
 				}
-			}
-			if( d2hmemcpy_cmds_cnt == ncmds ) {
-				memcpy_cmd_option = 1;
-			} else if( h2dmemcpy_cmds_cnt == ncmds ) {
-				memcpy_cmd_option = 2;
-			}
+				if( d2hmemcpy_cmds_cnt == ncmds ) {
+					memcpy_cmd_option = 1;
+				} else if( h2dmemcpy_cmds_cnt == ncmds ) {
+					memcpy_cmd_option = 2;
+				}
 #elif OPT_MEMCPY_ONLY_POLICY == 1
-			int d2hmemcpy_cmds_cnt = 0;
-			int ncmds = 0;
-			iris_task_info(task, iris_ncmds, &ncmds, NULL);
-			int *cmds = (int *)malloc(ncmds*sizeof(int));
-			iris_task_info(task, iris_cmds, cmds, NULL);
-			for(int i=0; i<ncmds; i++) {
-				int ctype = cmds[i];
-				if( ctype == IRIS_CMD_D2H ) {
-					d2hmemcpy_cmds_cnt += 1;
-				} else {
-					break;
+				int d2hmemcpy_cmds_cnt = 0;
+				int ncmds = 0;
+				iris_task_info(task, iris_ncmds, &ncmds, NULL);
+				int *cmds = (int *)malloc(ncmds*sizeof(int));
+				iris_task_info(task, iris_cmds, cmds, NULL);
+				for(int i=0; i<ncmds; i++) {
+					int ctype = cmds[i];
+					if( ctype == IRIS_CMD_D2H ) {
+						d2hmemcpy_cmds_cnt += 1;
+					} else {
+						break;
+					}
 				}
-			}
-			if( d2hmemcpy_cmds_cnt == ncmds ) {
-				memcpy_cmd_option = 1;
-			}
+				if( d2hmemcpy_cmds_cnt == ncmds ) {
+					memcpy_cmd_option = 1;
+				}
 #endif
-  			HostConf_t *tconf = getHostConf(threadID);
-			if( currentAsync == DEFAULT_QUEUE+tconf->asyncID_offset ) {
+				if( nestingLevelGR == 0 ) {
+  					HostConf_t *tconf = getHostConf(threadID);
+					if( currentAsync == DEFAULT_QUEUE+tconf->asyncID_offset ) {
 #if IRIS_TASK_SUBMIT_MODE == 0
 #ifdef _OPENARC_PROFILE_
-    			if( HI_openarcrt_verbosity > 2 ) {
-        			fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_exit_subregion (label = %s, nestlevel = %d, thread ID = %d) submits an IRIS task synchronously to the device %d\n", label, nestingLevel, threadID, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option));
-    			}
+    					if( HI_openarcrt_verbosity > 2 ) {
+        					fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_exit_subregion (label = %s, mode =%d, nestlevel = %d, thread ID = %d) submits an IRIS task synchronously to the device %d\n", label, mode, nestingLevel, threadID, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option));
+    					}
 #endif			
-				err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option), NULL, true);
-				if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
-#ifdef _OPENARC_PROFILE_
-				tconf->BTaskCnt++;	
-#endif
-    			iris_task_release(task);
-				if( !(tmpHostMemSet->empty()) ) {
-					for(std::set<const void *>::iterator it=tmpHostMemSet->begin(); it!=tmpHostMemSet->end(); ++it) {
-						free((void *)*it);
-					}
-					tmpHostMemSet->clear();
-				}
-  				threadTaskMap.erase(threadID);
-  				threadAsyncMap[threadID] = NO_QUEUE;
-				threadTaskMapNesting[threadID] = 0;
-#else
-				//[DEBUG on Sept. 22, 2024] When IRIS DMEM is used, H2D transfers are implicitly handled
-				//and thus, H2D commands are not included in the IRIS task.
-				if((openarcrt_iris_dmem == 1) || (iris_task_kernel_cmd_only(task) != IRIS_SUCCESS)) {
-					if( asyncTaskMap->count(currentAsync) > 0 ) {
-#ifdef _OPENARC_PROFILE_
-    					if( HI_openarcrt_verbosity > 2 ) {
-        					fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_exit_subregion (label = %s, nestlevel = %d, thread ID = %d) submits an IRIS task synchronously (async ID = %d) with dependency to the device %d\n", label, nestingLevel, threadID, currentAsync, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option));
-    					}
-#endif
-						iris_task dependTaskList[1] = { asyncTaskMap->at(currentAsync) };
-						iris_task_depend(task, 1, dependTaskList); 
 						err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option), NULL, true);
 						if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
-						iris_task_release(dependTaskList[0]);
-						asyncTaskMap->erase(currentAsync);
-					} else {
 #ifdef _OPENARC_PROFILE_
-    					if( HI_openarcrt_verbosity > 2 ) {
-        					fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_exit_subregion (label = %s, nestlevel = %d, thread ID = %d) submits an IRIS task synchronously (async ID = %d) without dependency to the device %d\n", label, nestingLevel, threadID, currentAsync, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option));
-    					}
-#endif					
-						err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option), NULL, true);
-						if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
-					}
-#ifdef _OPENARC_PROFILE_
-					tconf->BTaskCnt++;	
+						tconf->BTaskCnt++;	
 #endif
-    				iris_task_release(task);
-					if( !(tmpHostMemSet->empty()) ) {
-						for(std::set<const void *>::iterator it=tmpHostMemSet->begin(); it!=tmpHostMemSet->end(); ++it) {
-							free((void *)*it);
+    					iris_task_release(task);
+						if( !(tmpHostMemSet->empty()) ) {
+							for(std::set<const void *>::iterator it=tmpHostMemSet->begin(); it!=tmpHostMemSet->end(); ++it) {
+								free((void *)*it);
+							}
+							tmpHostMemSet->clear();
 						}
-						tmpHostMemSet->clear();
+  						threadTaskMap.erase(threadID);
+  						threadAsyncMap[threadID] = NO_QUEUE;
+						threadTaskMapNesting[threadID] = 0;
+#else
+						//[DEBUG on Sept. 22, 2024] When IRIS DMEM is used, H2D transfers are implicitly handled
+						//and thus, H2D commands are not included in the IRIS task.
+						if((openarcrt_iris_dmem == 1) || (iris_task_kernel_cmd_only(task) != IRIS_SUCCESS)) {
+							if( asyncTaskMap->count(currentAsync) > 0 ) {
+#ifdef _OPENARC_PROFILE_
+    							if( HI_openarcrt_verbosity > 2 ) {
+        							fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_exit_subregion (label = %s, mode = %d, nestlevel = %d, thread ID = %d) submits an IRIS task synchronously (async ID = %d) with dependency to the device %d\n", label, mode, nestingLevel, threadID, currentAsync, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option));
+    							}
+#endif
+								iris_task dependTaskList[1] = { asyncTaskMap->at(currentAsync) };
+								iris_task_depend(task, 1, dependTaskList); 
+								err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option), NULL, true);
+								if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
+								iris_task_release(dependTaskList[0]);
+								asyncTaskMap->erase(currentAsync);
+							} else {
+#ifdef _OPENARC_PROFILE_
+    							if( HI_openarcrt_verbosity > 2 ) {
+        							fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_exit_subregion (label = %s, mode = %d, nestlevel = %d, thread ID = %d) submits an IRIS task synchronously (async ID = %d) without dependency to the device %d\n", label, mode, nestingLevel, threadID, currentAsync, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option));
+    							}
+#endif					
+								err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option), NULL, true);
+								if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
+							}
+#ifdef _OPENARC_PROFILE_
+							tconf->BTaskCnt++;	
+#endif
+    						iris_task_release(task);
+							if( !(tmpHostMemSet->empty()) ) {
+								for(std::set<const void *>::iterator it=tmpHostMemSet->begin(); it!=tmpHostMemSet->end(); ++it) {
+									free((void *)*it);
+								}
+								tmpHostMemSet->clear();
+							}
+  							threadTaskMap.erase(threadID);
+  							threadAsyncMap[threadID] = NO_QUEUE;
+							threadTaskMapNesting[threadID] = 0;
+						} else {
+							if( asyncTaskMap->count(currentAsync) > 0 ) {
+#ifdef _OPENARC_PROFILE_
+    							if( HI_openarcrt_verbosity > 2 ) {
+        							fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_exit_subregion (label = %s, mode = %d, nestlevel = %d, thread ID = %d) submits an IRIS task asynchronously (async ID = %d) with dependency to the device %d\n", label, mode, nestingLevel, threadID, currentAsync, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option));
+    							}
+#endif
+								iris_task dependTaskList[1] = { asyncTaskMap->at(currentAsync) };
+								iris_task_depend(task, 1, dependTaskList); 
+								err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option), NULL, false);
+								if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
+								iris_task_release(dependTaskList[0]);
+								//asyncTaskMap->erase(currentAsync);
+							} else {
+#ifdef _OPENARC_PROFILE_
+    							if( HI_openarcrt_verbosity > 2 ) {
+        							fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_exit_subregion (label = %s, mode = %d, nestlevel = %d,thread ID = %d) submits an IRIS task asynchronously (async ID = %d) without dependency to the device %d\n", label, mode, nestingLevel, threadID, currentAsync, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option));
+    							}
+#endif					
+								err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option), NULL, false);
+								if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
+							}
+							(*asyncTaskMap)[currentAsync] = task;
+  							threadTaskMap.erase(threadID);
+  							threadAsyncMap[threadID] = NO_QUEUE;
+							threadTaskMapNesting[threadID] = 0;
+#ifdef _OPENARC_PROFILE_
+							tconf->BTaskCnt++;	
+#endif
+						}
+#endif
+					} else if( currentAsync != NO_QUEUE) {
+						if( asyncTaskMap->count(currentAsync) > 0 ) {
+	#ifdef _OPENARC_PROFILE_
+    						if( HI_openarcrt_verbosity > 2 ) {
+        						fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_exit_subregion (label = %s, mode = %d, nestlevel = %d,thread ID = %d) submits an IRIS task asynchronously (async ID = %d) with dependency to the device %d\n", label, mode, nestingLevel, threadID, currentAsync, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option));
+    						}
+#endif
+							iris_task dependTaskList[1] = { asyncTaskMap->at(currentAsync) };
+							iris_task_depend(task, 1, dependTaskList); 
+							err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option), NULL, false);
+							if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
+							iris_task_release(dependTaskList[0]);
+						} else {
+#ifdef _OPENARC_PROFILE_
+    						if( HI_openarcrt_verbosity > 2 ) {
+        						fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_exit_subregion (label = %s, mode = %d, nestlevel = %d,thread ID = %d) submits an IRIS task asynchronously (async ID = %d) without dependency to the device %d\n", label, mode, nestingLevel, threadID, currentAsync, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option));
+    						}
+#endif				
+							err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option), NULL, false);
+							if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
+						}
+						(*asyncTaskMap)[currentAsync] = task;
+  						threadTaskMap.erase(threadID);
+  						threadAsyncMap[threadID] = NO_QUEUE;
+						threadTaskMapNesting[threadID] = 0;
+#ifdef _OPENARC_PROFILE_
+						tconf->BTaskCnt++;	
+#endif
+					} else {
+						threadTaskMapNesting[threadID] = 0;
 					}
-  					threadTaskMap.erase(threadID);
-  					threadAsyncMap[threadID] = NO_QUEUE;
-					threadTaskMapNesting[threadID] = 0;
-				} else {
+				} else { //nestingLevelGR > 0
+  					HostConf_t *tconf = getHostConf(threadID);
+					//Add a task to the IRIS graph.
 					if( asyncTaskMap->count(currentAsync) > 0 ) {
 #ifdef _OPENARC_PROFILE_
     					if( HI_openarcrt_verbosity > 2 ) {
-        					fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_exit_subregion (label = %s, nestlevel = %d, thread ID = %d) submits an IRIS task asynchronously (async ID = %d) with dependency to the device %d\n", label, nestingLevel, threadID, currentAsync, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option));
-    					}
+        					fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_exit_subregion (label = %s, mode = %d, nestlevel = %d,thread ID = %d) add an IRIS task to a IRIS task graph (async ID = %d) with dependency to the device %d\n", label, mode, nestingLevel, threadID, currentAsync, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option));
+    						}
 #endif
-						iris_task dependTaskList[1] = { asyncTaskMap->at(currentAsync) };
-						iris_task_depend(task, 1, dependTaskList); 
-						err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option), NULL, false);
-						if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
-						iris_task_release(dependTaskList[0]);
-						//asyncTaskMap->erase(currentAsync);
-					} else {
+							iris_task dependTaskList[1] = { asyncTaskMap->at(currentAsync) };
+							iris_task_depend(task, 1, dependTaskList); 
+							err = iris_graph_task(graph, task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option), NULL);
+							if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
+						} else {
 #ifdef _OPENARC_PROFILE_
-    					if( HI_openarcrt_verbosity > 2 ) {
-        					fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_exit_subregion (label = %s, nestlevel = %d,thread ID = %d) submits an IRIS task asynchronously (async ID = %d) without dependency to the device %d\n", label, nestingLevel, threadID, currentAsync, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option));
-    					}
-#endif					
-						err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option), NULL, false);
-						if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
-					}
-					(*asyncTaskMap)[currentAsync] = task;
-  					threadTaskMap.erase(threadID);
-  					threadAsyncMap[threadID] = NO_QUEUE;
-					threadTaskMapNesting[threadID] = 0;
-#ifdef _OPENARC_PROFILE_
-					tconf->BTaskCnt++;	
-#endif
-				}
-#endif
-			} else if( currentAsync != NO_QUEUE) {
-				if( asyncTaskMap->count(currentAsync) > 0 ) {
-#ifdef _OPENARC_PROFILE_
-    				if( HI_openarcrt_verbosity > 2 ) {
-        				fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_exit_subregion (label = %s, nestlevel = %d,thread ID = %d) submits an IRIS task asynchronously (async ID = %d) with dependency to the device %d\n", label, nestingLevel, threadID, currentAsync, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option));
-    				}
-#endif
-					iris_task dependTaskList[1] = { asyncTaskMap->at(currentAsync) };
-					iris_task_depend(task, 1, dependTaskList); 
-					err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option), NULL, false);
-					if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
-					iris_task_release(dependTaskList[0]);
-				} else {
-#ifdef _OPENARC_PROFILE_
-    				if( HI_openarcrt_verbosity > 2 ) {
-        				fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_exit_subregion (label = %s, nestlevel = %d,thread ID = %d) submits an IRIS task asynchronously (async ID = %d) without dependency to the device %d\n", label, nestingLevel, threadID, currentAsync, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option));
-    				}
+    						if( HI_openarcrt_verbosity > 2 ) {
+        						fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_exit_subregion (label = %s, mode = %d, nestlevel = %d,thread ID = %d) add an IRIS task to a IRIS task graph (async ID = %d) without dependency to the device %d\n", label, mode, nestingLevel, threadID, currentAsync, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option));
+    						}
 #endif				
-					err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option), NULL, false);
-					if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
-				}
-				(*asyncTaskMap)[currentAsync] = task;
-  				threadTaskMap.erase(threadID);
-  				threadAsyncMap[threadID] = NO_QUEUE;
-				threadTaskMapNesting[threadID] = 0;
+							err = iris_graph_task(graph, task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option), NULL);
+							if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
+						}
+						(*asyncTaskMap)[currentAsync] = task;
+  						threadTaskMap.erase(threadID);
+  						threadAsyncMap[threadID] = NO_QUEUE;
+						threadTaskMapNesting[threadID] = 0;
 #ifdef _OPENARC_PROFILE_
-				tconf->BTaskCnt++;	
+						tconf->BTaskCnt++;	
 #endif
+				} 
 			} else {
 				threadTaskMapNesting[threadID] = 0;
 			}
-		} else {
-			threadTaskMapNesting[threadID] = 0;
+		} else { //nestingLevel > 0
+			threadTaskMapNesting[threadID] = nestingLevel;
 		}
-	} else {
-		threadTaskMapNesting[threadID] = nestingLevel;
+	} else if( mode == 1 ) {
+  		HostConf_t *tconf = getHostConf(threadID);
+		nestingLevelGR--;
+		if( nestingLevelGR <= 0 ) {
+			if( graph_exist ) {
+				int num_tasks = iris_graph_tasks_count(graph);
+				//Submit a graph if containing tasks.
+				if(num_tasks > 0) {
+#ifdef _OPENARC_PROFILE_
+    				if( HI_openarcrt_verbosity > 2 ) {
+        				fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_exit_subregion (label = %s, mode = %d, nestlevel = %d,thread ID = %d) submit an IRIS task graph to the device %d\n", label, mode, nestingLevel, threadID, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, 0));
+    				}
+#endif
+					err = iris_graph_submit(graph, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, 0), false);
+					if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
+				}
+#ifdef _OPENARC_PROFILE_
+				tconf->BTaskCnt += num_tasks;	
+#endif
+			}
+			threadGraphMapNesting[threadID] = 0;
+		} else { //nestingLevelGR > 0
+			threadGraphMapNesting[threadID] = nestingLevelGR;
+		}
 	}
 #ifdef _OPENARC_PROFILE_
     if( HI_openarcrt_verbosity > 2 ) {
-        fprintf(stderr, "[OPENARCRT-INFO]\t\texit IrisDriver::HI_exit_subregion (label = %s, nestlevel = %d, thread ID = %d)\n", label, nestingLevel, threadID);
+        fprintf(stderr, "[OPENARCRT-INFO]\t\texit IrisDriver::HI_exit_subregion (label = %s, mode = %d, nestlevel = %d, thread ID = %d)\n", label, mode, nestingLevel, threadID);
     }
 #endif
 }

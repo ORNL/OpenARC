@@ -83,6 +83,7 @@ typedef std::map<int, int> threadtaskmapnestingbrisbane_t;
 #else
 typedef std::map<int, int> threadasyncmapiris_t;
 typedef std::map<int, iris_task> threadtaskmapiris_t;
+typedef std::map<int, iris_graph> threadgraphmapiris_t;
 typedef std::map<int, threadtaskmapiris_t *> threadasynctaskmapiris_t;
 typedef std::map<int, int> threadtaskmapnestingiris_t;
 #endif
@@ -285,8 +286,8 @@ public:
     int HI_async_test_all(int threadID=NO_THREAD_ID);
     void HI_wait_for_events(int async, int num_waits, int* waits, int threadID=NO_THREAD_ID);
 	int HI_getBrisbaneDeviceID(acc_device_t devType, acc_device_t userInput, int devnum, int memTrOnly=0);
-	void HI_enter_subregion(const char *label, int threadID=NO_THREAD_ID);
-	void HI_exit_subregion(const char *label, int threadID=NO_THREAD_ID);
+	void HI_enter_subregion(const char *label, int mode=0, int threadID=NO_THREAD_ID);
+	void HI_exit_subregion(const char *label, int mode=0, int threadID=NO_THREAD_ID);
 } BrisbaneDriver_t;
 #else
 typedef class IrisDriver: public Accelerator
@@ -312,8 +313,10 @@ public:
 	//thread to IRIS task mapping table.
 	threadasyncmapiris_t threadAsyncMap;
 	threadtaskmapiris_t threadTaskMap;
+	threadgraphmapiris_t threadGraphMap;
 	threadasynctaskmapiris_t threadAsyncTaskMap;
 	threadtaskmapnestingiris_t threadTaskMapNesting;
+	threadtaskmapnestingiris_t threadGraphMapNesting;
 	threadhostmemfreemap_t threadHostMemFreeMap;
 
 public:
@@ -377,8 +380,8 @@ public:
     int HI_async_test_all(int threadID=NO_THREAD_ID);
     void HI_wait_for_events(int async, int num_waits, int* waits, int threadID=NO_THREAD_ID);
 	int HI_getIrisDeviceID(acc_device_t devType, acc_device_t userInput, int devnum, int memTrOnly=0);
-	void HI_enter_subregion(const char *label, int threadID=NO_THREAD_ID);
-	void HI_exit_subregion(const char *label, int threadID=NO_THREAD_ID);
+	void HI_enter_subregion(const char *label, int mode=0, int threadID=NO_THREAD_ID);
+	void HI_exit_subregion(const char *label, int mode=0, int threadID=NO_THREAD_ID);
 } IrisDriver_t;
 #endif
 #endif

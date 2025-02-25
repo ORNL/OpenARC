@@ -4810,6 +4810,7 @@ public class ACC2CUDATranslator extends ACC2GPUTranslator {
 			FunctionCall enterSubRegionCall = new FunctionCall(new NameID("HI_enter_subregion"));
 			//enterSubRegionCall.addArgument(new NameID("NULL"));
 			enterSubRegionCall.addArgument(new StringLiteral(cProcName));
+			enterSubRegionCall.addArgument(new IntegerLiteral(0));
 			/*
 			 * if( logicalThreadID != null ) {
 			 * enterSubRegionCall.addArgument(logicalThreadID.clone()); }
@@ -4818,6 +4819,7 @@ public class ACC2CUDATranslator extends ACC2GPUTranslator {
 			FunctionCall exitSubRegionCall = new FunctionCall(new NameID("HI_exit_subregion"));
 			//exitSubRegionCall.addArgument(new NameID("NULL"));
 			exitSubRegionCall.addArgument(new StringLiteral(cProcName));
+			exitSubRegionCall.addArgument(new IntegerLiteral(0));
 			/*
 			 * if( logicalThreadID != null ) {
 			 * exitSubRegionCall.addArgument(logicalThreadID.clone()); }
@@ -4939,6 +4941,7 @@ public class ACC2CUDATranslator extends ACC2GPUTranslator {
 			FunctionCall enterSubRegionCall = new FunctionCall(new NameID("HI_enter_subregion"));
 			//enterSubRegionCall.addArgument(new NameID("NULL"));
 			enterSubRegionCall.addArgument(new StringLiteral(cProcName));
+			enterSubRegionCall.addArgument(new IntegerLiteral(0));
 			/*
 			 * if( logicalThreadID != null ) {
 			 * enterSubRegionCall.addArgument(logicalThreadID.clone()); }
@@ -4947,6 +4950,7 @@ public class ACC2CUDATranslator extends ACC2GPUTranslator {
 			FunctionCall exitSubRegionCall = new FunctionCall(new NameID("HI_exit_subregion"));
 			//exitSubRegionCall.addArgument(new NameID("NULL"));
 			exitSubRegionCall.addArgument(new StringLiteral(cProcName));
+			exitSubRegionCall.addArgument(new IntegerLiteral(0));
 			/*
 			 * if( logicalThreadID != null ) {
 			 * exitSubRegionCall.addArgument(logicalThreadID.clone()); }

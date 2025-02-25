@@ -2596,10 +2596,10 @@ void HI_set_context() {
 	HI_set_context(NO_THREAD_ID);
 }
 
-void HI_enter_subregion(const char *label,  int threadID) {
+void HI_enter_subregion(const char *label, int mode,  int threadID) {
 #ifdef _OPENARC_PROFILE_
 	if( HI_openarcrt_verbosity > 1 ) {
-		fprintf(stderr, "[OPENARCRT-INFO]\tenter HI_enter_subregion(label = %s, thread ID = %d)\n", label, threadID);
+		fprintf(stderr, "[OPENARCRT-INFO]\tenter HI_enter_subregion(label = %s, mode = %d, thread ID = %d)\n", label, mode, threadID);
 	}
 #endif
     HostConf_t * tconf = getHostConf(threadID);
@@ -2607,22 +2607,22 @@ void HI_enter_subregion(const char *label,  int threadID) {
         fprintf(stderr, "[ERROR in HI_enter_subregion()] Not supported in the current device type %d; exit!\n", tconf->acc_device_type_var);
 		exit(1);
 	}
-    tconf->device->HI_enter_subregion(label, tconf->threadID);
+    tconf->device->HI_enter_subregion(label, mode, tconf->threadID);
 #ifdef _OPENARC_PROFILE_
 	if( HI_openarcrt_verbosity > 1 ) {
-		fprintf(stderr, "[OPENARCRT-INFO]\texit HI_enter_subregion(label = %s, thread ID = %d)\n", label, threadID);
+		fprintf(stderr, "[OPENARCRT-INFO]\texit HI_enter_subregion(label = %s, mode = %d, thread ID = %d)\n", label, mode, threadID);
 	}
 #endif
 }
 
-void HI_enter_subregion(const char *label) {
-	HI_enter_subregion(label, NO_THREAD_ID);
+void HI_enter_subregion(const char *label, int mode) {
+	HI_enter_subregion(label, mode, NO_THREAD_ID);
 }
 
-void HI_exit_subregion(const char *label,  int threadID) {
+void HI_exit_subregion(const char *label, int mode, int threadID) {
 #ifdef _OPENARC_PROFILE_
 	if( HI_openarcrt_verbosity > 1 ) {
-		fprintf(stderr, "[OPENARCRT-INFO]\tenter HI_exit_subregion(label = %s, thread ID = %d)\n", label, threadID);
+		fprintf(stderr, "[OPENARCRT-INFO]\tenter HI_exit_subregion(label = %s, mode = %d, thread ID = %d)\n", label, mode, threadID);
 	}
 #endif
     HostConf_t * tconf = getHostConf(threadID);
@@ -2630,14 +2630,14 @@ void HI_exit_subregion(const char *label,  int threadID) {
         fprintf(stderr, "[ERROR in HI_exit_subregion()] Not supported in the current device type %d; exit!\n", tconf->acc_device_type_var);
 		exit(1);
 	}
-    tconf->device->HI_exit_subregion(label, tconf->threadID);
+    tconf->device->HI_exit_subregion(label, mode, tconf->threadID);
 #ifdef _OPENARC_PROFILE_
 	if( HI_openarcrt_verbosity > 1 ) {
-		fprintf(stderr, "[OPENARCRT-INFO]\texit HI_exit_subregion(label = %s, thread ID = %d)\n", label, threadID);
+		fprintf(stderr, "[OPENARCRT-INFO]\texit HI_exit_subregion(label = %s, mode = %d, thread ID = %d)\n", label, mode, threadID);
 	}
 #endif
 }
 
-void HI_exit_subregion(const char *label) {
-	HI_exit_subregion(label,  NO_THREAD_ID);
+void HI_exit_subregion(const char *label, int mode) {
+	HI_exit_subregion(label, mode, NO_THREAD_ID);
 }

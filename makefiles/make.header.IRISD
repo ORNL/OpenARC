@@ -81,7 +81,6 @@
 # -std=c99 option.)                                                #
 # ==> From OSX V10.14, clang and clang++ should be used for CC and #
 #     CXX, respectively, while still using gcc for CPP.            #
-#     On OSX V14.7, use gcc 12.4.0 (from MacPorts package gcc12).  #
 #                                                                  #
 # LLVM_TARGET_TRIPLE and LLVM_TARGET_DATA_LAYOUT describe the      #
 # target platform to LLVM.  If you have clang installed, you can   #
@@ -114,59 +113,36 @@ CETUS_OUTPUT = cetus_output
 ########################################################################
 # Set the target system                                                #
 ########################################################################
-# OSX: OS X system with an AMD GPU                                     #
+# IRIS: System where the IRIS runtime is used to manage heterogeneous  #
+#          accelerator devices.                                        #
 ########################################################################
-TARGET_SYSTEM = OSX
+TARGET_SYSTEM = IRISD
 
-###############################################
-# Target System: OS X 10.14 (Radeon HD 6490M) #
-###############################################
-ifeq ($(TARGET_SYSTEM),OSX)
+#######################
+# Target System: IRIS #
+#######################
+ifeq ($(TARGET_SYSTEM),IRISD)
 
-OPENARC_ARCH = 1
+OPENARC_ARCH = 6
 GOMP_FLAGS = -fopenmp
 GOMP_LIBS = -lgomp
 GPTHREADS_FLAGS = 
 GPTHREADS_LIBS = -lpthread
-CC = clang
-CXX = clang++
-CPP = gcc -E -std=c99
-#CC = gcc
-#CXX = g++
-#CPP = $(CC) -E -std=c99
-#CC = mpicc -std=c99
-#CXX = mpicxx
-#CPP = gcc -E -std=c99
+CC = mpicc
+CXX = mpicxx
+CPP = gcc -E
 GMACROS = -DOPENARC_ARCH=$(OPENARC_ARCH)
 GPROFILEMACROS = -D_OPENARC_PROFILE_=1
-BACKENDCXX = clang++
-#BACKENDCXX = g++
-#BACKENDCXX = mpicxx
-CC_FLAGS_PREFIX = 
-GBACKEND_FLAGS = -arch x86_64 -std=c++11
+BACKENDCXX = $(CXX)
+CC_FLAGS_PREFIX =
+GBACKEND_FLAGS = -O3 -fPIC
 GBACKEND_INCLUDES = 
-GBACKEND_LIBS = -framework OpenCL
+GBACKEND_LIBS =
 GBACKEND_DEBUG = -g
-GFRONTEND_FLAGS = -O3 -arch x86_64 -std=c++11
-GFRONTEND_INCLUDES = 
-GFRONTEND_LIBS = -framework OpenCL
+GFRONTEND_FLAGS = -O3
+GFRONTEND_INCLUDES = -I$(OPENARCINCLUDE)
+GFRONTEND_LIBS = -liris -ldl 
 GFRONTEND_DEBUG = -g
-
-LLVM_TARGET_TRIPLE = x86_64-apple-macosx14.0.0
-LLVM_TARGET_DATA_LAYOUT = e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128
-PERL = perl
-
-#MPI_FLAGS =
-MPI_INCLUDES = /opt/local/include/mpich-mp
-MPI_LIBDIR = /opt/local/lib/mpich-mp
-#MPI_EXEC =
-FC = gfortran-mp-4.9
-#SPEC_CPU2006 =
-SPEC_CFG = spec-osx.cfg.in
-#JUNIT_CLASSPATH =
-#NVM_TESTDIR =
-
-HAVE_PMEM_NVML = 0
 
 endif
 

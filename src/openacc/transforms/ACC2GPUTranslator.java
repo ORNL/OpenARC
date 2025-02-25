@@ -1011,6 +1011,7 @@ public abstract class ACC2GPUTranslator {
 				}
 				//enterSubRegionCall.addArgument(new StringLiteral(cProcName+taskRegionCounter));
 				enterSubRegionCall.addArgument(new StringLiteral(cProcName));
+				enterSubRegionCall.addArgument(new IntegerLiteral(0));
 				/*
 				 * if( logicalThreadID != null ) {
 				 * enterSubRegionCall.addArgument(logicalThreadID.clone()); }
@@ -1021,6 +1022,7 @@ public abstract class ACC2GPUTranslator {
 				//exitSubRegionCall.addArgument(new StringLiteral(cProcName+taskRegionCounter));
 				//taskRegionCounter++;
 				exitSubRegionCall.addArgument(new StringLiteral(cProcName));
+				exitSubRegionCall.addArgument(new IntegerLiteral(0));
 				/*
 				 * if( logicalThreadID != null ) {
 				 * exitSubRegionCall.addArgument(logicalThreadID.clone()); }
@@ -1052,6 +1054,7 @@ public abstract class ACC2GPUTranslator {
 				//enterSubRegionCall.addArgument(new NameID("NULL"));
 				//enterSubRegionCall.addArgument(new StringLiteral(cProcName+taskRegionCounter));
 				enterSubRegionCall.addArgument(new StringLiteral(cProcName));
+				enterSubRegionCall.addArgument(new IntegerLiteral(0));
 				/*
 				 * if( logicalThreadID != null ) {
 				 * enterSubRegionCall.addArgument(logicalThreadID.clone()); }
@@ -1062,6 +1065,7 @@ public abstract class ACC2GPUTranslator {
 				//exitSubRegionCall.addArgument(new StringLiteral(cProcName+taskRegionCounter));
 				//taskRegionCounter++;
 				exitSubRegionCall.addArgument(new StringLiteral(cProcName));
+				exitSubRegionCall.addArgument(new IntegerLiteral(0));
 				/*
 				 * if( logicalThreadID != null ) {
 				 * exitSubRegionCall.addArgument(logicalThreadID.clone()); }
@@ -1259,6 +1263,7 @@ public abstract class ACC2GPUTranslator {
 				//enterSubRegionCall.addArgument(new NameID("NULL"));
 				//enterSubRegionCall.addArgument(new NameID(cProcName+taskRegionCounter));
 				enterSubRegionCall.addArgument(new StringLiteral(cProcName));
+				enterSubRegionCall.addArgument(new IntegerLiteral(0));
 				/*
 				 * if( logicalThreadID != null ) {
 				 * enterSubRegionCall.addArgument(logicalThreadID.clone()); }
@@ -1269,6 +1274,7 @@ public abstract class ACC2GPUTranslator {
 				//exitSubRegionCall.addArgument(new StringLiteral(cProcName+taskRegionCounter));
 				//taskRegionCounter++;
 				exitSubRegionCall.addArgument(new StringLiteral(cProcName));
+				exitSubRegionCall.addArgument(new IntegerLiteral(0));
 				/*
 				 * if( logicalThreadID != null ) {
 				 * exitSubRegionCall.addArgument(logicalThreadID.clone()); }
@@ -1392,6 +1398,7 @@ public abstract class ACC2GPUTranslator {
 				//enterSubRegionCall.addArgument(new NameID("NULL"));
 				//enterSubRegionCall.addArgument(new StringLiteral(cProcName+taskRegionCounter));
 				enterSubRegionCall.addArgument(new StringLiteral(cProcName));
+				enterSubRegionCall.addArgument(new IntegerLiteral(0));
 				/*
 				 * if( logicalThreadID != null ) {
 				 * enterSubRegionCall.addArgument(logicalThreadID.clone()); }
@@ -1402,6 +1409,7 @@ public abstract class ACC2GPUTranslator {
 				//exitSubRegionCall.addArgument(new StringLiteral(cProcName+taskRegionCounter));
 				//taskRegionCounter++;
 				exitSubRegionCall.addArgument(new StringLiteral(cProcName));
+				exitSubRegionCall.addArgument(new IntegerLiteral(0));
 				/*
 				 * if( logicalThreadID != null ) {
 				 * exitSubRegionCall.addArgument(logicalThreadID.clone()); }
@@ -1522,6 +1530,7 @@ public abstract class ACC2GPUTranslator {
 					//enterSubRegionCall.addArgument(new NameID("NULL"));
 					//enterSubRegionCall.addArgument(new StringLiteral(cProcName+taskRegionCounter));
 					enterSubRegionCall.addArgument(new StringLiteral(cProcName));
+					enterSubRegionCall.addArgument(new IntegerLiteral(0));
 					/*
 					 * if( logicalThreadID != null ) {
 					 * enterSubRegionCall.addArgument(logicalThreadID.clone()); }
@@ -1532,6 +1541,7 @@ public abstract class ACC2GPUTranslator {
 					//exitSubRegionCall.addArgument(new StringLiteral(cProcName+taskRegionCounter));
 					//taskRegionCounter++;
 					exitSubRegionCall.addArgument(new StringLiteral(cProcName));
+					exitSubRegionCall.addArgument(new IntegerLiteral(0));
 					/*
 					 * if( logicalThreadID != null ) {
 					 * exitSubRegionCall.addArgument(logicalThreadID.clone()); }
@@ -1563,6 +1573,7 @@ public abstract class ACC2GPUTranslator {
 					//enterSubRegionCall.addArgument(new NameID("NULL"));
 					//enterSubRegionCall.addArgument(new StringLiteral(cProcName+taskRegionCounter));
 					enterSubRegionCall.addArgument(new StringLiteral(cProcName));
+					enterSubRegionCall.addArgument(new IntegerLiteral(0));
 					/*
 					 * if( logicalThreadID != null ) {
 					 * enterSubRegionCall.addArgument(logicalThreadID.clone()); }
@@ -1573,6 +1584,7 @@ public abstract class ACC2GPUTranslator {
 					//exitSubRegionCall.addArgument(new StringLiteral(cProcName+taskRegionCounter));
 					//taskRegionCounter++;
 					exitSubRegionCall.addArgument(new StringLiteral(cProcName));
+					exitSubRegionCall.addArgument(new IntegerLiteral(0));
 					/*
 					 * if( logicalThreadID != null ) {
 					 * exitSubRegionCall.addArgument(logicalThreadID.clone()); }
@@ -2191,6 +2203,7 @@ public abstract class ACC2GPUTranslator {
 						//enterSubRegionCall.addArgument(new NameID("NULL"));
 						//enterSubRegionCall.addArgument(new StringLiteral(cProcName+taskRegionCounter));
 						enterSubRegionCall.addArgument(new StringLiteral(cProcName));
+						enterSubRegionCall.addArgument(new IntegerLiteral(0));
 						/*
 						 * if( logicalThreadID != null ) {
 						 * enterSubRegionCall.addArgument(logicalThreadID.clone()); }
@@ -2201,6 +2214,7 @@ public abstract class ACC2GPUTranslator {
 						//exitSubRegionCall.addArgument(new StringLiteral(cProcName+taskRegionCounter));
 						//taskRegionCounter++;
 						exitSubRegionCall.addArgument(new StringLiteral(cProcName));
+						exitSubRegionCall.addArgument(new IntegerLiteral(0));
 						/*
 						 * if( logicalThreadID != null ) {
 						 * exitSubRegionCall.addArgument(logicalThreadID.clone()); }
@@ -2231,6 +2245,7 @@ public abstract class ACC2GPUTranslator {
 						//enterSubRegionCall.addArgument(new NameID("NULL"));
 						//enterSubRegionCall.addArgument(new StringLiteral(cProcName+taskRegionCounter));
 						enterSubRegionCall.addArgument(new StringLiteral(cProcName));
+						enterSubRegionCall.addArgument(new IntegerLiteral(0));
 						/*
 						 * if( logicalThreadID != null ) {
 						 * enterSubRegionCall.addArgument(logicalThreadID.clone()); }
@@ -2241,6 +2256,7 @@ public abstract class ACC2GPUTranslator {
 						//exitSubRegionCall.addArgument(new StringLiteral(cProcName+taskRegionCounter));
 						//taskRegionCounter++;
 						exitSubRegionCall.addArgument(new StringLiteral(cProcName));
+						exitSubRegionCall.addArgument(new IntegerLiteral(0));
 						/*
 						 * if( logicalThreadID != null ) {
 						 * exitSubRegionCall.addArgument(logicalThreadID.clone()); }
@@ -2350,6 +2366,7 @@ public abstract class ACC2GPUTranslator {
 				//enterSubRegionCall.addArgument(new NameID("NULL"));
 				//enterSubRegionCall.addArgument(new StringLiteral(cProcName+taskRegionCounter));
 				enterSubRegionCall.addArgument(new StringLiteral(cProcName));
+				enterSubRegionCall.addArgument(new IntegerLiteral(0));
 				/*
 				 * if( logicalThreadID != null ) {
 				 * enterSubRegionCall.addArgument(logicalThreadID.clone()); }
@@ -2360,6 +2377,7 @@ public abstract class ACC2GPUTranslator {
 				//exitSubRegionCall.addArgument(new StringLiteral(cProcName+taskRegionCounter));
 				//taskRegionCounter++;
 				exitSubRegionCall.addArgument(new StringLiteral(cProcName));
+				exitSubRegionCall.addArgument(new IntegerLiteral(0));
 				/*
 				 * if( logicalThreadID != null ) {
 				 * exitSubRegionCall.addArgument(logicalThreadID.clone()); }
@@ -2491,6 +2509,7 @@ public abstract class ACC2GPUTranslator {
 						//enterSubRegionCall.addArgument(new NameID("NULL"));
 						//enterSubRegionCall.addArgument(new StringLiteral(cProcName+taskRegionCounter));
 						enterSubRegionCall.addArgument(new StringLiteral(cProcName));
+						enterSubRegionCall.addArgument(new IntegerLiteral(0));
 						/*
 						 * if( logicalThreadID != null ) {
 						 * enterSubRegionCall.addArgument(logicalThreadID.clone()); }
@@ -2501,6 +2520,7 @@ public abstract class ACC2GPUTranslator {
 						//exitSubRegionCall.addArgument(new StringLiteral(cProcName+taskRegionCounter));
 						//taskRegionCounter++;
 						exitSubRegionCall.addArgument(new StringLiteral(cProcName));
+						exitSubRegionCall.addArgument(new IntegerLiteral(0));
 						/*
 						 * if( logicalThreadID != null ) {
 						 * exitSubRegionCall.addArgument(logicalThreadID.clone()); }
@@ -2531,6 +2551,7 @@ public abstract class ACC2GPUTranslator {
 						//enterSubRegionCall.addArgument(new NameID("NULL"));
 						//enterSubRegionCall.addArgument(new StringLiteral(cProcName+taskRegionCounter));
 						enterSubRegionCall.addArgument(new StringLiteral(cProcName));
+						enterSubRegionCall.addArgument(new IntegerLiteral(0));
 						/*
 						 * if( logicalThreadID != null ) {
 						 * enterSubRegionCall.addArgument(logicalThreadID.clone()); }
@@ -2541,6 +2562,7 @@ public abstract class ACC2GPUTranslator {
 						//exitSubRegionCall.addArgument(new StringLiteral(cProcName+taskRegionCounter));
 						//taskRegionCounter++;
 						exitSubRegionCall.addArgument(new StringLiteral(cProcName));
+						exitSubRegionCall.addArgument(new IntegerLiteral(0));
 						/*
 						 * if( logicalThreadID != null ) {
 						 * exitSubRegionCall.addArgument(logicalThreadID.clone()); }
@@ -2648,6 +2670,7 @@ public abstract class ACC2GPUTranslator {
 				//enterSubRegionCall.addArgument(new NameID("NULL"));
 				//enterSubRegionCall.addArgument(new StringLiteral(cProcName+taskRegionCounter));
 				enterSubRegionCall.addArgument(new StringLiteral(cProcName));
+				enterSubRegionCall.addArgument(new IntegerLiteral(0));
 				/*
 				 * if( logicalThreadID != null ) {
 				 * enterSubRegionCall.addArgument(logicalThreadID.clone()); }
@@ -2658,6 +2681,7 @@ public abstract class ACC2GPUTranslator {
 				//exitSubRegionCall.addArgument(new StringLiteral(cProcName+taskRegionCounter));
 				//taskRegionCounter++;
 				exitSubRegionCall.addArgument(new StringLiteral(cProcName));
+				exitSubRegionCall.addArgument(new IntegerLiteral(0));
 				/*
 				 * if( logicalThreadID != null ) {
 				 * exitSubRegionCall.addArgument(logicalThreadID.clone()); }

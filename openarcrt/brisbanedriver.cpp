@@ -2384,11 +2384,11 @@ void BrisbaneDriver::HI_wait_for_events(int async, int num_waits, int* waits, in
 #endif
 }
 
-void BrisbaneDriver::HI_enter_subregion(const char *label, int threadID) {
+void BrisbaneDriver::HI_enter_subregion(const char *label, int mode, int threadID) {
   	int nestingLevel = threadTaskMapNesting[threadID];
 #ifdef _OPENARC_PROFILE_
     if( HI_openarcrt_verbosity > 2 ) {
-        fprintf(stderr, "[OPENARCRT-INFO]\t\tenter BrisbaneDriver::HI_enter_subregion (label = %s, nestlevel = %d, thread ID = %d)\n", label, nestingLevel, threadID);
+        fprintf(stderr, "[OPENARCRT-INFO]\t\tenter BrisbaneDriver::HI_enter_subregion (label = %s, mode = %d, nestlevel = %d, thread ID = %d)\n", label, mode, nestingLevel, threadID);
     }
 #endif
   	brisbane_task task;
@@ -2398,7 +2398,7 @@ void BrisbaneDriver::HI_enter_subregion(const char *label, int threadID) {
 	if( nestingLevel == 0 ) {
 #ifdef _OPENARC_PROFILE_
     if( HI_openarcrt_verbosity > 2 ) {
-        fprintf(stderr, "[OPENARCRT-INFO]\t\tBrisbaneDriver::HI_enter_subregion (label = %s, nestlevel = %d, thread ID = %d) creates a brisbane task\n", label, nestingLevel, threadID);
+        fprintf(stderr, "[OPENARCRT-INFO]\t\tBrisbaneDriver::HI_enter_subregion (label = %s, mode = %d, nestlevel = %d, thread ID = %d) creates a brisbane task\n", label, mode, nestingLevel, threadID);
     }
 #endif
   		brisbane_task_create(&task);
@@ -2408,16 +2408,16 @@ void BrisbaneDriver::HI_enter_subregion(const char *label, int threadID) {
 	threadTaskMapNesting[threadID] = ++nestingLevel;
 #ifdef _OPENARC_PROFILE_
     if( HI_openarcrt_verbosity > 2 ) {
-        fprintf(stderr, "[OPENARCRT-INFO]\t\texit BrisbaneDriver::HI_enter_subregion (label = %s, nestlevel = %d, thread ID = %d)\n", label, nestingLevel, threadID);
+        fprintf(stderr, "[OPENARCRT-INFO]\t\texit BrisbaneDriver::HI_enter_subregion (label = %s, mode = %d, nestlevel = %d, thread ID = %d)\n", label, mode, nestingLevel, threadID);
     }
 #endif
 }
 
-void BrisbaneDriver::HI_exit_subregion(const char *label, int threadID) {
+void BrisbaneDriver::HI_exit_subregion(const char *label, int mode, int threadID) {
   	int nestingLevel = threadTaskMapNesting[threadID];
 #ifdef _OPENARC_PROFILE_
     if( HI_openarcrt_verbosity > 2 ) {
-        fprintf(stderr, "[OPENARCRT-INFO]\t\tenter BrisbaneDriver::HI_exit_subregion (label = %s, nestlevel = %d, thread ID = %d)\n", label, nestingLevel, threadID);
+        fprintf(stderr, "[OPENARCRT-INFO]\t\tenter BrisbaneDriver::HI_exit_subregion (label = %s, mode = %d, nestlevel = %d, thread ID = %d)\n", label, mode, nestingLevel, threadID);
     }
 #endif
   	int currentAsync = threadAsyncMap[threadID];
@@ -2478,7 +2478,7 @@ void BrisbaneDriver::HI_exit_subregion(const char *label, int threadID) {
 #if BRISBANE_TASK_SUBMIT_MODE == 0
 #ifdef _OPENARC_PROFILE_
     			if( HI_openarcrt_verbosity > 2 ) {
-        			fprintf(stderr, "[OPENARCRT-INFO]\t\tBrisbaneDriver::HI_exit_subregion (label = %s, nestlevel = %d, thread ID = %d) submits a brisbane task synchronously to the device %d\n", label, nestingLevel, threadID, HI_getBrisbaneDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option));
+        			fprintf(stderr, "[OPENARCRT-INFO]\t\tBrisbaneDriver::HI_exit_subregion (label = %s, mode = %d, nestlevel = %d, thread ID = %d) submits a brisbane task synchronously to the device %d\n", label, mode, nestingLevel, threadID, HI_getBrisbaneDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option));
     			}
 #endif
     			brisbane_task_submit(task, HI_getBrisbaneDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option), NULL, true);
@@ -2500,7 +2500,7 @@ void BrisbaneDriver::HI_exit_subregion(const char *label, int threadID) {
 					if( asyncTaskMap->count(currentAsync) > 0 ) {
 #ifdef _OPENARC_PROFILE_
     					if( HI_openarcrt_verbosity > 2 ) {
-        					fprintf(stderr, "[OPENARCRT-INFO]\t\tBrisbaneDriver::HI_exit_subregion (label = %s, nestlevel = %d, thread ID = %d) submits a brisbane task synchronously (async ID = %d) with dependency to the device %d\n", label, nestingLevel, threadID, currentAsync, HI_getBrisbaneDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option));
+        					fprintf(stderr, "[OPENARCRT-INFO]\t\tBrisbaneDriver::HI_exit_subregion (label = %s, mode = %d, nestlevel = %d, thread ID = %d) submits a brisbane task synchronously (async ID = %d) with dependency to the device %d\n", label, mode, nestingLevel, threadID, currentAsync, HI_getBrisbaneDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option));
     					}
 #endif
 						brisbane_task dependTaskList[1] = { asyncTaskMap->at(currentAsync) };
@@ -2511,7 +2511,7 @@ void BrisbaneDriver::HI_exit_subregion(const char *label, int threadID) {
 					} else {
 #ifdef _OPENARC_PROFILE_
     					if( HI_openarcrt_verbosity > 2 ) {
-        					fprintf(stderr, "[OPENARCRT-INFO]\t\tBrisbaneDriver::HI_exit_subregion (label = %s, nestlevel = %d, thread ID = %d) submits a brisbane task synchronously (async ID = %d) without dependency to the device %d\n", label, nestingLevel, threadID, currentAsync, HI_getBrisbaneDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option));
+        					fprintf(stderr, "[OPENARCRT-INFO]\t\tBrisbaneDriver::HI_exit_subregion (label = %s, mode = %d, nestlevel = %d, thread ID = %d) submits a brisbane task synchronously (async ID = %d) without dependency to the device %d\n", label, mode, nestingLevel, threadID, currentAsync, HI_getBrisbaneDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option));
     					}
 #endif
     					brisbane_task_submit(task, HI_getBrisbaneDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option), NULL, true);
@@ -2533,7 +2533,7 @@ void BrisbaneDriver::HI_exit_subregion(const char *label, int threadID) {
 					if( asyncTaskMap->count(currentAsync) > 0 ) {
 #ifdef _OPENARC_PROFILE_
     					if( HI_openarcrt_verbosity > 2 ) {
-        					fprintf(stderr, "[OPENARCRT-INFO]\t\tBrisbaneDriver::HI_exit_subregion (label = %s, nestlevel = %d, thread ID = %d) submits a brisbane task asynchronously (async ID = %d) with dependency to the device %d\n", label, nestingLevel, threadID, currentAsync, HI_getBrisbaneDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option));
+        					fprintf(stderr, "[OPENARCRT-INFO]\t\tBrisbaneDriver::HI_exit_subregion (label = %s, mode = %d, nestlevel = %d, thread ID = %d) submits a brisbane task asynchronously (async ID = %d) with dependency to the device %d\n", label, mode, nestingLevel, threadID, currentAsync, HI_getBrisbaneDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option));
     					}
 #endif
 						brisbane_task dependTaskList[1] = { asyncTaskMap->at(currentAsync) };
@@ -2544,7 +2544,7 @@ void BrisbaneDriver::HI_exit_subregion(const char *label, int threadID) {
 					} else {
 #ifdef _OPENARC_PROFILE_
     					if( HI_openarcrt_verbosity > 2 ) {
-        					fprintf(stderr, "[OPENARCRT-INFO]\t\tBrisbaneDriver::HI_exit_subregion (label = %s, nestlevel = %d,thread ID = %d) submits a brisbane task asynchronously (async ID = %d) without dependency to the device %d\n", label, nestingLevel, threadID, currentAsync, HI_getBrisbaneDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option));
+        					fprintf(stderr, "[OPENARCRT-INFO]\t\tBrisbaneDriver::HI_exit_subregion (label = %s, mode = %d, nestlevel = %d,thread ID = %d) submits a brisbane task asynchronously (async ID = %d) without dependency to the device %d\n", label, mode, nestingLevel, threadID, currentAsync, HI_getBrisbaneDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option));
     					}
 #endif
     					brisbane_task_submit(task, HI_getBrisbaneDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option), NULL, false);
@@ -2562,7 +2562,7 @@ void BrisbaneDriver::HI_exit_subregion(const char *label, int threadID) {
 				if( asyncTaskMap->count(currentAsync) > 0 ) {
 #ifdef _OPENARC_PROFILE_
     				if( HI_openarcrt_verbosity > 2 ) {
-        				fprintf(stderr, "[OPENARCRT-INFO]\t\tBrisbaneDriver::HI_exit_subregion (label = %s, nestlevel = %d,thread ID = %d) submits a brisbane task asynchronously (async ID = %d) with dependency to the device %d\n", label, nestingLevel, threadID, currentAsync, HI_getBrisbaneDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option));
+        				fprintf(stderr, "[OPENARCRT-INFO]\t\tBrisbaneDriver::HI_exit_subregion (label = %s, mode = %d, nestlevel = %d,thread ID = %d) submits a brisbane task asynchronously (async ID = %d) with dependency to the device %d\n", label, mode, nestingLevel, threadID, currentAsync, HI_getBrisbaneDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option));
     				}
 #endif
 					brisbane_task dependTaskList[1] = { asyncTaskMap->at(currentAsync) };
@@ -2572,7 +2572,7 @@ void BrisbaneDriver::HI_exit_subregion(const char *label, int threadID) {
 				} else {
 #ifdef _OPENARC_PROFILE_
     				if( HI_openarcrt_verbosity > 2 ) {
-        				fprintf(stderr, "[OPENARCRT-INFO]\t\tBrisbaneDriver::HI_exit_subregion (label = %s, nestlevel = %d,thread ID = %d) submits a brisbane task asynchronously (async ID = %d) without dependency to the device %d\n", label, nestingLevel, threadID, currentAsync, HI_getBrisbaneDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option));
+        				fprintf(stderr, "[OPENARCRT-INFO]\t\tBrisbaneDriver::HI_exit_subregion (label = %s, mode = %d, nestlevel = %d,thread ID = %d) submits a brisbane task asynchronously (async ID = %d) without dependency to the device %d\n", label, mode, nestingLevel, threadID, currentAsync, HI_getBrisbaneDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option));
     				}
 #endif
     				brisbane_task_submit(task, HI_getBrisbaneDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var, memcpy_cmd_option), NULL, false);
@@ -2595,7 +2595,7 @@ void BrisbaneDriver::HI_exit_subregion(const char *label, int threadID) {
 	}
 #ifdef _OPENARC_PROFILE_
     if( HI_openarcrt_verbosity > 2 ) {
-        fprintf(stderr, "[OPENARCRT-INFO]\t\texit BrisbaneDriver::HI_exit_subregion (label = %s, nestlevel = %d, thread ID = %d)\n", label, nestingLevel, threadID);
+        fprintf(stderr, "[OPENARCRT-INFO]\t\texit BrisbaneDriver::HI_exit_subregion (label = %s, mode = %d, nestlevel = %d, thread ID = %d)\n", label, mode, nestingLevel, threadID);
     }
 #endif
 }

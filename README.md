@@ -14,6 +14,8 @@ accelerator computing.
 OpenARC supports the full feature set of OpenACC V1.0 (+ subset of V2.0) and performs 
 source-to-source transformations, targeting heterogeneous devices, such as 
 NVIDIA GPUs, AMD GPUs, Intel MICs, and Altera FPGAs.
+Please refer to the OpenARC Wiki (https://github.com/ORNL/OpenARC/wiki/OpenARC) to 
+find more details on OpenARC.
 
 ## REQUIREMENTS
 

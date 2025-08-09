@@ -98,7 +98,7 @@ $ make install
 
 Example commands to build for the IRIS backend:
 
-(Refer to ./doc/README_OpenARC_IRIS.txt for more details on how to build and use IRIS as an OpenARC backend.)
+(Refer to `./doc/README_OpenARC_IRIS.txt` for more details on how to build and use IRIS as an OpenARC backend.)
 
 ```shell
 $ mkdir build
@@ -625,8 +625,7 @@ To cite OpenARC, please use the following papers:
 
     Seyong Lee and Jeffrey S. Vetter, OpenARC: Extensible OpenACC Compiler Framework for Directive-Based Accelerator Programming Study, WACCPD: Workshop on Accelerator Programming Using Directives in Conjunction with SC'14, November 2014
 
-Bibtex files for the above papers and other OpenARC-related research can be found
-in the OpenARC website (http://ft.ornl.gov/research/openarc).
+Other OpenARC-related research publications can be found in the OpenARC Wiki (https://github.com/ORNL/OpenARC/wiki/OpenARC).
 
 
 ## LIMITATIONS
@@ -745,6 +744,6 @@ directives to structured blocks. The two-step parsing may not work if either for
 
 The OpenARC Team
 
-URL: https://csmd.ornl.gov/project/openarc-open-accelerator-research-compiler
+URL: https://github.com/ORNL/OpenARC/wiki/OpenARC
 
-EMAIL: lees2@ornl.gov
+EMAIL: lees2 AT ornl DOT gov

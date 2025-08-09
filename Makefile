@@ -51,21 +51,21 @@ ifndef PREDICTED_TARGET_SYSTEM
 endif
 
 ifndef PREDICTED_TARGET_SYSTEM
-  UNAME := $(shell locate libOpenCL.so &> /dev/null && echo -n OPENCL)
+  UNAME := $(shell which locate &> /dev/null && locate libOpenCL.so &> /dev/null && echo -n OPENCL)
   ifeq ($(UNAME),OPENCL)
     PREDICTED_TARGET_SYSTEM = OPENCL 
   endif
 endif
 
 ifndef PREDICTED_TARGET_SYSTEM
-  UNAME := $(shell locate libiris.so > /dev/null && echo -n IRIS)
+  UNAME := $(shell which locate &> /dev/null && locate libiris.so > /dev/null && echo -n IRIS)
   ifeq ($(UNAME),IRIS)
     PREDICTED_TARGET_SYSTEM = IRIS 
   endif
 endif
 
 ifndef PREDICTED_TARGET_SYSTEM
-  UNAME := $(shell locate libbrisbane.so > /dev/null && echo -n BRISBANE)
+  UNAME := $(shell which locate &> /dev/null && locate libbrisbane.so > /dev/null && echo -n BRISBANE)
   ifeq ($(UNAME),BRISBANE)
     PREDICTED_TARGET_SYSTEM = BRISBANE 
   endif

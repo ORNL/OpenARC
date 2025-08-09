@@ -344,6 +344,10 @@ public class acc2gpu extends CodeGenPass
 		value = Driver.getOptionValue("enableOpenCLArrayFlattening");
 		if( value != null ) {
 			enableOpenCLArrayFlattening = true;
+//[DEBUG on June 23, 2025]
+//Change this option back to be optional since some OpenCL compilers 
+//may fail to parse the flattened array if too complex.
+/*
 		} else {
 			if( OPENARC_ARCH == 1 ) {
 				//[DEBUG on October 22, 2024 by Seyong Lee] 
@@ -351,7 +355,7 @@ public class acc2gpu extends CodeGenPass
 				//because of the address space qualifier error by the Apple Clang OpenCL compiler.
 				enableOpenCLArrayFlattening = true;
 			}
-			
+*/			
 		}
 
 		if( OPENARC_ARCH == 3 ) {

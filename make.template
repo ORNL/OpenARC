@@ -116,6 +116,7 @@ OCXXSRCS = $(notdir $(OCXXSRCS1))
 # Set the input C++ source files (CXXSRCS) #
 ############################################
 #CXXSRCS = main.cpp
+ICXXSRCS = $(notdir $(CXXSRCS))
 
 #########################################
 # Set macros used for the input program #
@@ -263,7 +264,7 @@ $(BENCHMARK)_CPU2: $(CXXSRCS) makedirectories
 $(BENCHMARK)_TCPU: $($(CETUS_OUTPUT)/$(OCXXSRCS)) $(CXXSRCS) makedirectories
 	$(COPY_CXXSRCS)
 	$(PRECMD)
-	cd $(CETUS_OUTPUT); $(CXX) $(DEFSET_CPU) $(CFLAGS2) -I ../ -o ../$(BENCHMARK_TCPU) $(OCXXSRCS) $(CXXSRCS) -L$(OPENARCLIB) $(COMMONCLIBS) $(CLIBS2) $(GPTHREADS_LIBS); if [ -f "./$(KERNEL_FILE)" ]; then  cp $(KERNEL_FILE) ../$(TARGET); fi; cd ../
+	cd $(CETUS_OUTPUT); $(CXX) $(DEFSET_CPU) $(CFLAGS2) -I ../ -o ../$(BENCHMARK_TCPU) $(OCXXSRCS) $(ICXXSRCS) -L$(OPENARCLIB) $(COMMONCLIBS) $(CLIBS2) $(GPTHREADS_LIBS); if [ -f "./$(KERNEL_FILE)" ]; then  cp $(KERNEL_FILE) ../$(TARGET); fi; cd ../
 	$(POSTCMD)
 
 $(BENCHMARK)_LLVM: $(CSRCS) makedirectories
@@ -277,7 +278,7 @@ $(BENCHMARK)_ACC: COMPILE_HOST COMPILE_KERNEL
 COMPILE_HOST: $($(CETUS_OUTPUT)/$(OCXXSRCS)) $(CXXSRCS) makedirectories
 	$(COPY_CXXSRCS)
 	$(PRECMD)
-	cd $(CETUS_OUTPUT); $(CXX) $(DEFSET_ACC) $(CFLAGS2) -I ../ -o ../$(BENCHMARK_OPENACC) $(OCXXSRCS) $(CXXSRCS) $(CLIBS2_BASE) $(CLIBS2) $(GPTHREADS_LIBS); cp $(KERNEL_FILE) ../$(TARGET); if [ -f "$(OPENARCBIN)/binBuilder_$(OPENARCLIB_SUFFIX)" ]; then cp $(OPENARCBIN)/binBuilder_$(OPENARCLIB_SUFFIX) ../$(TARGET); fi; if [ -f "$(OPENARCBIN)/Timer" ]; then cp $(OPENARCBIN)/Timer ../$(TARGET); fi; cd ../
+	cd $(CETUS_OUTPUT); $(CXX) $(DEFSET_ACC) $(CFLAGS2) -I ../ -o ../$(BENCHMARK_OPENACC) $(OCXXSRCS) $(ICXXSRCS) $(CLIBS2_BASE) $(CLIBS2) $(GPTHREADS_LIBS); cp $(KERNEL_FILE) ../$(TARGET); if [ -f "$(OPENARCBIN)/binBuilder_$(OPENARCLIB_SUFFIX)" ]; then cp $(OPENARCBIN)/binBuilder_$(OPENARCLIB_SUFFIX) ../$(TARGET); fi; if [ -f "$(OPENARCBIN)/Timer" ]; then cp $(OPENARCBIN)/Timer ../$(TARGET); fi; cd ../
 	cd $(CETUS_OUTPUT); grep resilience $(KERNEL_FILE) > /dev/null && cp $(OPENARCINCLUDE)/$(RESILIENCE_FILE) $(OPENARCINCLUDE)/resilience.h ../$(TARGET); cd ../
 
 COMPILE_KERNEL: $($(CETUS_OUTPUT)/$(KERNLE_FILE)) makedirectories

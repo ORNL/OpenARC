@@ -976,6 +976,7 @@ HI_error_t OpenCLDriver::destroy(int threadID) {
 		fprintf(stderr, "[OPENARCRT-INFO]\t\tenter OpenCLDriver::destroy()\n");
 	}
 #endif
+#if 0
     HostConf_t * tconf = getHostConf(threadID);
     cl_int err;
 
@@ -1041,6 +1042,7 @@ HI_error_t OpenCLDriver::destroy(int threadID) {
     }
 #ifdef _THREAD_SAFETY
         pthread_mutex_unlock(&mutex_clContext);
+#endif
 #endif
 #ifdef _OPENARC_PROFILE_
 	if( HI_openarcrt_verbosity > 2 ) {

@@ -239,41 +239,66 @@ public class ACCAnnotationParser extends TransformPass
 				}
 				else if ((attach_to_next_annotatable) && (obj instanceof Annotatable))
 				{
-					List<Annotation> attachedSet =  new LinkedList<Annotation>();
-					Annotatable container = (Annotatable)obj;
-					if (!annots_to_be_attached.isEmpty() && container != null)
-					{
-						/* Attach the new annotations to this container if valid*/
-						for (Annotation annot_to_be_attached : annots_to_be_attached)
-							if( annot_to_be_attached instanceof ACCAnnotation ) {
-								if( ((ACCAnnotation)annot_to_be_attached).isValidTo(container) ) {
-									container.annotate(annot_to_be_attached);
-									attachedSet.add(annot_to_be_attached);
+					//[DEBUG on July 3, 2025] NormalizeReturn pass may wrongly insert a return variable declaration statement
+					//between an OpenACC directive and its structured block. If so, skip the return variable declaration statement.
+					boolean skipThisObj = false;
+					if( obj instanceof DeclarationStatement ) {
+						Declaration tDecl = ((DeclarationStatement)obj).getDeclaration();
+						if( tDecl instanceof VariableDeclaration ) {
+							List<IDExpression> idList = ((VariableDeclaration)tDecl).getDeclaredIDs();
+							for( IDExpression tId : idList ) {
+								if( tId.getName().contains("_ret_val_") ) {
+									skipThisObj = true;
+									break;
 								}
-							} else if( annot_to_be_attached instanceof ASPENAnnotation ) {
-								if( ((ASPENAnnotation)annot_to_be_attached).isValidTo(container) ) {
-									container.annotate(annot_to_be_attached);
-									attachedSet.add(annot_to_be_attached);
-								}
-							} else if( annot_to_be_attached instanceof NVLAnnotation ) {
-								if( ((NVLAnnotation)annot_to_be_attached).isValidTo(container) ) {
-									container.annotate(annot_to_be_attached);
-									attachedSet.add(annot_to_be_attached);
-								}
-							} else {
-								container.annotate(annot_to_be_attached);
-								attachedSet.add(annot_to_be_attached);
 							}
-					} 
-					else
-					{
-						System.err.println("[Error ACCAnnotationParser()] unexpected control sequence found");
-						System.exit(0);
+						}
+					} else if( obj instanceof VariableDeclaration ) {
+						List<IDExpression> idList = ((VariableDeclaration)obj).getDeclaredIDs();
+						for( IDExpression tId : idList ) {
+								if( tId.getName().contains("_ret_val_") ) {
+									skipThisObj = true;
+									break;
+								}
+							}
 					}
-					annots_to_be_attached.removeAll(attachedSet);
-					if( annots_to_be_attached.isEmpty() ) {
-						/* reset the flag to false, we've attached all annotations */
-						attach_to_next_annotatable = false;
+					if( !skipThisObj ) {
+						List<Annotation> attachedSet =  new LinkedList<Annotation>();
+						Annotatable container = (Annotatable)obj;
+						if (!annots_to_be_attached.isEmpty() && container != null)
+						{
+							/* Attach the new annotations to this container if valid*/
+							for (Annotation annot_to_be_attached : annots_to_be_attached)
+								if( annot_to_be_attached instanceof ACCAnnotation ) {
+									if( ((ACCAnnotation)annot_to_be_attached).isValidTo(container) ) {
+										container.annotate(annot_to_be_attached);
+										attachedSet.add(annot_to_be_attached);
+									}
+								} else if( annot_to_be_attached instanceof ASPENAnnotation ) {
+									if( ((ASPENAnnotation)annot_to_be_attached).isValidTo(container) ) {
+										container.annotate(annot_to_be_attached);
+										attachedSet.add(annot_to_be_attached);
+									}
+								} else if( annot_to_be_attached instanceof NVLAnnotation ) {
+									if( ((NVLAnnotation)annot_to_be_attached).isValidTo(container) ) {
+										container.annotate(annot_to_be_attached);
+										attachedSet.add(annot_to_be_attached);
+									}
+								} else {
+									container.annotate(annot_to_be_attached);
+									attachedSet.add(annot_to_be_attached);
+								}
+						} 
+						else
+						{
+							System.err.println("[Error ACCAnnotationParser()] unexpected control sequence found");
+							System.exit(0);
+						}
+						annots_to_be_attached.removeAll(attachedSet);
+						if( annots_to_be_attached.isEmpty() ) {
+							/* reset the flag to false, we've attached all annotations */
+							attach_to_next_annotatable = false;
+						}
 					}
 				}
 			}

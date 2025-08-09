@@ -2,7 +2,7 @@
 
 ## RELEASE
 
-OpenARC V1.0.0 (November 1, 2024)
+OpenARC V1.2.0 (August 11, 2025)
 
 Open Accelerator Research Compiler (OpenARC) is a framework built on top of 
 the Cetus compiler infrastructure (http://cetus.ecn.purdue.edu), which is 
@@ -14,8 +14,6 @@ accelerator computing.
 OpenARC supports the full feature set of OpenACC V1.0 (+ subset of V2.0) and performs 
 source-to-source transformations, targeting heterogeneous devices, such as 
 NVIDIA GPUs, AMD GPUs, Intel MICs, and Altera FPGAs.
-Please refer to the OpenARC website (https://csmd.ornl.gov/project/openarc-open-accelerator-research-compiler) to 
-find more details on OpenARC.
 
 ## REQUIREMENTS
 
@@ -97,6 +95,8 @@ $ make install
 ```
 
 Example commands to build for the IRIS backend:
+
+(Refer to ./doc/README_OpenARC_IRIS.txt for more details on how to build and use IRIS as an OpenARC backend.)
 
 ```shell
 $ mkdir build
@@ -458,6 +458,12 @@ To JIT-compile the kernel file, be sure to delete any old kernel binary (openarc
 ## FEATURES/UPDATES
 
 - New features
+	- Update the OpenACC directive parser so that users can add `acc internel` directives to the input program for more advanced control on the compiler.
+
+	- Implement acc_memcpy_device() and acc_memcpy_device_async() APIs.
+
+	- Add support for CMake build.
+
 	- Add a new environment variable, `OPENARC_VICTIM_CACHE_MODE` to control the victim cache mode.
 
 	- Add a new environment variable, `OPENARCRT_IRIS_DMEM` to control the type of IRIS memory objects when targeting the IRIS device.
@@ -522,6 +528,10 @@ To JIT-compile the kernel file, be sure to delete any old kernel binary (openarc
     - Update CUDA runtime to allow intermixing of both OpenACC and CUDA. (See example in [openarc-path]/test/examples/openarc/matmul_openacc_cuda)
 
 - Bug fixes and improvements
+	- Fix an IRIS driver bug, which incorrectly enforced implicit synchronization and implicit asynchronous kernel launch.
+
+	- Fix a deadlock error, which occurred when an IRIS task with H2D commands only is submitted synchronously.
+
 	- Fixed bugs in the parser to handle version numbers (e.g., 1.2.3) in the attributes.
 
 	- Fixed bugs in the device memory handler management to accept general handler types.

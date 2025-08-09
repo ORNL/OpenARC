@@ -45,7 +45,7 @@ double my_timer ()
 void matmul( _FLOAT_* restrict Z, _FLOAT_* restrict X, _FLOAT_* restrict Y, unsigned int dimSize, unsigned int chunkSizeX, unsigned int chunkSizeY, int asyncID ) {
 	unsigned int i, j, k;
 #ifdef MERGE_TASKS
-	HI_enter_subregion("matmul");
+	HI_enter_subregion("matmul", 0);
 #endif
 	#pragma acc update device(X[0:dimSize*chunkSizeX], Y[0:dimSize*chunkSizeY]) async(asyncID)
 	#pragma acc parallel loop independent gang worker collapse(2) present(X[0:dimSize*chunkSizeX], Y[0:dimSize*chunkSizeY]) present(Z[0:chunkSizeX*chunkSizeY]) async(asyncID)
@@ -61,7 +61,7 @@ void matmul( _FLOAT_* restrict Z, _FLOAT_* restrict X, _FLOAT_* restrict Y, unsi
 	}
 	#pragma acc update host(Z[0:chunkSizeX*chunkSizeY]) async(asyncID)
 #ifdef MERGE_TASKS
-	HI_exit_subregion("matmul");
+	HI_exit_subregion("matmul", 0);
 #endif
 }
 

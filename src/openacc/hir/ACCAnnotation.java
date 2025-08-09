@@ -196,6 +196,18 @@ public class ACCAnnotation extends PragmaAnnotation
  *     recvbuf ( [device] [,] [readonly] )
  *     async [(int-expr)]    
  * 
+ * #pragma acc internal [clause[[,] clause]...]
+ * <p>
+ * where clause can be anyone including
+ *    accglobal(list)
+ *    accshared(list)
+ *    accexplicitshared(list)
+ *    accprivate(list)
+ *    accreduction(list)
+ *    accdeviceptr(list)
+ *    accreadonly(list)
+ *    accpreadonly(list)
+ *    accwriteonly(list)
  *     
  */
 
@@ -216,7 +228,7 @@ public class ACCAnnotation extends PragmaAnnotation
 		"use_device", "collapse", "cache", "device_resident", "host",
 		"device", 
 		"accglobal", "accshared", "accprivate", "accfirstprivate", "accreduction", "accdeviceptr",
-		"accexplicitshared", "accreadonly", "accpreadonly", "accreadonlyprivate",
+		"accexplicitshared", "accreadonly", "accpreadonly", "accreadonlyprivate", "accwriteonly",
 		"iterspace", "rcreate", "gangdim", "workerdim", "gangconf", "workerconf",
 		"totalnumgangs", "totalnumworkers", "tile", "pipe", "pipein", "pipeout",
 		"default_async", "device_num", "device_type", "delete",
@@ -318,7 +330,7 @@ public class ACCAnnotation extends PragmaAnnotation
 	
 	public static final Set<String> internalDataClauses =
 		new HashSet<String>(Arrays.asList("accglobal", "accshared", "accprivate", "accfirstprivate",
-		"accreduction", "accdeviceptr", "accexplicitshared", "accreadonly", "accreadonlyprivate", "rcreate"));
+		"accreduction", "accdeviceptr", "accexplicitshared", "accreadonly", "accreadonlyprivate", "accwriteonly", "rcreate"));
 	
 	public static final Set<String> internalConfigClauses =
 		new HashSet<String>(Arrays.asList("iterspace", "gangdim", "workerdim",

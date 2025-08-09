@@ -4558,11 +4558,13 @@ int main(int argc, char *argv[])
   MPI_Init(&argc, &argv) ;
   MPI_Comm_size(MPI_COMM_WORLD, &numRanks) ;
   MPI_Comm_rank(MPI_COMM_WORLD, &myRank) ;
-
   printf("[%s:%d] [%d/%d]\n", __FILE__, __LINE__, myRank, numRanks);
+  acc_init(acc_device_default);
+  //acc_set_device_num(myRank, acc_device_default);
 #else
   numRanks = 1;
   myRank = 0;
+  acc_init(acc_device_default);
 #endif   
 
 #if LULESH_DUMP_OUTPUT
@@ -4625,7 +4627,7 @@ int main(int argc, char *argv[])
   MPI_Barrier(MPI_COMM_WORLD);
 #endif   
    
-  // BEGIN timestep to solution */
+  // BEGIN timestep to solution 
   Real_t start;
 #if USE_MPI   
   start = MPI_Wtime();
@@ -4902,9 +4904,15 @@ int main(int argc, char *argv[])
   //[DEBUG for Snapdragon]
   //elapsed_time = (clock() - start) / 1000000;
 #endif
-  double elapsed_timeG;
+  Real_t elapsed_timeG = 0.0;
 #if USE_MPI   
-  MPI_Reduce(&elapsed_time, &elapsed_timeG, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+  int status = MPI_Reduce(&elapsed_time, &elapsed_timeG, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+  if( myRank == 0 ) {
+  	if( status != MPI_SUCCESS ) {
+    	printf("[OPENARC-PROFILE] MPI_Reduce() returns an error: %d\n", status);
+  	}
+  }
+  //printf("[OPENARC-PROFILE] elapsed_time = %10.4f at rank %d\n", elapsed_time, myRank);
 #else
   elapsed_timeG = elapsed_time;
 #endif

@@ -627,10 +627,8 @@ HI_error_t BrisbaneDriver::destroy(int threadID) {
     if( HI_openarcrt_verbosity > 2 ) {
         fprintf(stderr, "[OPENARCRT-INFO]\t\tenter BrisbaneDriver::destroy()\n");
     }
-  	if( HI_openarcrt_verbosity > 4 ) {
-  		//fprintf(stderr, "[%s:%d][%s]\n", __FILE__, __LINE__, __func__);
-	}
 #endif
+#if 0
 	NVIDIADeviceIDs.clear();
 	AMDDeviceIDs.clear();
 	GPUDeviceIDs.clear();
@@ -642,6 +640,8 @@ HI_error_t BrisbaneDriver::destroy(int threadID) {
 #ifdef PRINT_TODO
 	fprintf(stderr, "[%s:%d][%s] Not Implemented!\n", __FILE__, __LINE__, __func__);
 #endif
+#endif
+	brisbane_finalize();
 
 #ifdef _OPENARC_PROFILE_
     if( HI_openarcrt_verbosity > 2 ) {

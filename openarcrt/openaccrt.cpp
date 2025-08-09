@@ -707,7 +707,7 @@ void HostConf::HI_reset() {
 		(it->second)->clear();
 	} 
 	
-	//device->destroy(threadID);
+	device->destroy(threadID);
 	//device->init_done = 0;
 	//Reset HostConf variables.
 /*

@@ -297,7 +297,7 @@ LB99:
 			float tmp = y[i];
 			x[i] = tmp;
 			if( tmp != 0.0f ) {
-				exp0 = (int)(log10f(fabsf(tmp)));
+				int exp0 = (int)(log10f(fabsf(tmp)));
 				if( exp0 >= 0 ) {
 					for( j=1; j<=(1+exp0); j++ ) {
 						x[i] = x[i]/10.0f;

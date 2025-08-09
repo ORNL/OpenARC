@@ -278,8 +278,10 @@ int main(int argc, char** argv) {
 				} else {
 					chunkSizeN = chunkSize;
 				}
-				if( asyncMode == 1 ) {
-					asyncID = 1;
+				if( asyncMode == 0 ) {
+					asyncID = acc_async_sync;
+				} else if( asyncMode == 1 ) {
+					asyncID = acc_async_noval;
 				} else if( asyncMode == 2 ) {
 					asyncID = (i*numTasksN+j) % nDevices;
 				} else {

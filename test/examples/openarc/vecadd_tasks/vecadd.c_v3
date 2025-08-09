@@ -26,7 +26,7 @@ int StrToInt(const char *token, unsigned int *retVal)
 void saxpy( float* restrict Z, float A, float* restrict X, float* restrict Y, unsigned int chunkSize, int asyncID ) {
 	unsigned int i;
 #ifdef MERGE_TASKS
-	HI_enter_subregion("saxpy");
+	HI_enter_subregion("saxpy", 0);
 #endif
 	#pragma acc update device(X[0:chunkSize], Y[0:chunkSize]) async(asyncID)
 	#pragma acc kernels loop independent gang worker present(X[0:chunkSize], Y[0:chunkSize]) present(Z[0:chunkSize]) async(asyncID)
@@ -35,7 +35,7 @@ void saxpy( float* restrict Z, float A, float* restrict X, float* restrict Y, un
 	}
 	#pragma acc update host(Z[0:chunkSize]) async(asyncID)
 #ifdef MERGE_TASKS
-	HI_exit_subregion("saxpy");
+	HI_exit_subregion("saxpy", 0);
 #endif
 }
 

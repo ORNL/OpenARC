@@ -1,7 +1,7 @@
 -------------------------------------------------------------------------------
 RELEASE
 -------------------------------------------------------------------------------
-OpenARC Runtime V1.0.0 (November 1, 2024)
+OpenARC Runtime V1.2.0 (August 11, 2025)
 
 OpenARC Runtime implements APIs used by the output program translated
 by OpenARC.
@@ -53,6 +53,8 @@ platform, by copying and modifying example configurations in the ./makefiles dir
 FEATURES/UPDATES
 -------------------------------------------------------------------------------
 * New features
+	- Implement acc_memcpy_device() and acc_memcpy_device_async() APIs.
+
 	- Add a new environment variable, `OPENARC_VICTIM_CACHE_MODE` to control the victim cache mode.
 
     - Add a new environment variable, `OPENARCRT_IRIS_DMEM` to control the type of IRIS memory objects when targeting the IRIS device.

@@ -49,7 +49,7 @@ DEFSET_ACC = -DVERIFICATION=$(VERIFICATION) -DNSTEPS=$(NSTEPS) -DREORDER=$(REORD
 #    p385_hpc_d5 //for Stratix V                         #
 #    p510t_sch_ax115 //for Arria 10 (Nallatech 510T)     #
 ##########################################################
-OMP ?= 1
+OMP ?= 0
 MODE ?= normal
 #AOCL_BOARD ?= p385_hpc_d5
 AOCL_BOARD ?= p510t_sch_ax115

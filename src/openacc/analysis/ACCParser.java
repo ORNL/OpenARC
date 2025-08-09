@@ -627,6 +627,19 @@ public class ACCParser {
 	 *     recvbuf ( [device] [,] [readonly] )
 	 *     async [(int-expr)]    
 	 * <p>
+	 * #pragma acc internal [clause[[,] clause]...]
+	 * <p>
+     * where clause can be anyone including
+     *    accglobal(list)
+     *    accshared(list)
+     *    accexplicitshared(list)
+     *    accprivate(list)
+     *    accreduction(list)
+     *    accdeviceptr(list)
+     *    accreadonly(list)
+     *    accpreadonly(list)
+     *    accwriteonly(list)
+	 * <p>
 	 * #pragma openarc ainfo procname(proc-name) kernelid(kernel-id)
 	 * <p>     
 	 * #pragma openarc cuda [clause[[,] clause]...]
@@ -753,6 +766,7 @@ public class ACCParser {
 			case acc_exit 	: parse_acc_exit(); return false;
 			case acc_set 	: parse_acc_set(); return false;
 			case acc_mpi 	: parse_acc_mpi(); return true;
+			case acc_internal 	: parse_acc_internal(); return true;
 			//		default : throw new NonOmpDirectiveException();
 			default : ACCParserError("Not Supported Construct");
 			}
@@ -2154,6 +2168,52 @@ public class ACCParser {
 				case acc_sendbuf		:	parse_conf_expressionset(tok); break;
 				case acc_recvbuf		:	parse_conf_expressionset(tok); break;
 				case acc_async	:	parse_acc_optionalconfclause(tok); break;
+				default : ACCParserError("NoSuchOpenACCConstruct : " + clause);
+				}
+			} catch( Exception e) {
+				ACCParserError("unexpected or wrong token found (" + tok + ")");
+			}
+		}
+	}
+
+	/** ---------------------------------------------------------------
+	 *		OpenACC internal Construct
+	 *
+	 *		#pragma acc internal [clause[[,] clause]...] new-line
+	 *
+	 *		where clause is one of the following
+     *      accglobal(list)
+     *      accshared(list)
+     *      accexplicitshared(list)
+     *      accprivate(list)
+     *      accreduction(list)
+     *      accdeviceptr(list)
+     *      accreadonly(list)
+     *      accpreadonly(list)
+     *      accwriteonly(list)
+	 * --------------------------------------------------------------- */
+	private static void parse_acc_internal()
+	{
+		addToMap("internal", "_directive");
+		PrintTools.println("ACCParser is parsing [internal] directive", 3);
+		while (end_of_token() == false) 
+		{
+			String tok = get_token();
+			if( tok.equals("") ) continue; //Skip empty string, which may occur due to macro.
+			if( tok.equals(",") ) continue; //Skip comma between clauses, if existing.
+			String clause = "acc_" + tok;
+			PrintTools.println("clause=" + clause, 3);
+			try {
+				switch (acc_clause.valueOf(clause)) {
+				case acc_accglobal		:	parse_acc_dataclause(tok); break;
+				case acc_accshared		:	parse_acc_dataclause(tok); break;
+				case acc_accexplicitshared		:	parse_acc_dataclause(tok); break;
+				case acc_accprivate		:	parse_acc_dataclause(tok); break;
+				case acc_accreduction		:	parse_acc_dataclause(tok); break;
+				case acc_accdeviceptr		:	parse_acc_dataclause(tok); break;
+				case acc_accreadonly		:	parse_acc_dataclause(tok); break;
+				case acc_accpreadonly		:	parse_acc_dataclause(tok); break;
+				case acc_accwriteonly		:	parse_acc_dataclause(tok); break;
 				default : ACCParserError("NoSuchOpenACCConstruct : " + clause);
 				}
 			} catch( Exception e) {
@@ -4375,7 +4435,8 @@ public class ACCParser {
 		acc_enter,
 		acc_exit,
 		acc_set,
-		acc_mpi
+		acc_mpi,
+		acc_internal
 	}
 	
 	public static enum arc_directives
@@ -4444,7 +4505,16 @@ public class ACCParser {
         acc_device_num,
         acc_device_type,
         acc_sendbuf,
-        acc_recvbuf
+        acc_recvbuf,
+        acc_accglobal,
+        acc_accshared,
+        acc_accexplicitshared,
+        acc_accprivate,
+        acc_accreduction,
+        acc_accdeviceptr,
+        acc_accreadonly,
+        acc_accpreadonly,
+        acc_accwriteonly
 	}
 	
 	public static enum ainfo_clause

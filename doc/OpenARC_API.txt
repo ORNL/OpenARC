@@ -392,6 +392,7 @@ accreduction(list) // The list contains reduction symbols.
 accdeviceptr(list) // The list contains deviceptr symbols.
 accreadonly(list) // The list contains R/O symbols.
 accpreadonly(list) // The list contains symbols that are R/O in the parent data region.
+accwriteonly(list) // The list contains W/O symbols.
 rcreate(list) 	// The list contains reduction symbols whose GPU memory will 
 				//be allocated at the attached annotatable.
 iterspace(exp) // exp is the iteration size expression for a gang loop.

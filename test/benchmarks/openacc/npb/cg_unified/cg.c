@@ -52,7 +52,7 @@ OpenMP C version: S. Satoh
 
 #ifdef _OPENARC_
 
-#pragma openarc #define	NZ	\NA*(\NONZER+1)*(\NONZER+1)+\NA*(\NONZER+2)
+#pragma openarc #define	NZ	NA*(NONZER+1)*(NONZER+1)+NA*(NONZER+2)
 #endif
 
 /* global variables */

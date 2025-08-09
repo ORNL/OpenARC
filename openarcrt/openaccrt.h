@@ -2164,6 +2164,8 @@ extern void acc_map_data_forced(h_void* hostPtr, d_void* devPtr, size_t size, in
 /////////////////////////////////////////////////////////// 
 // OpenACC Runtime Library Routines added in Version 2.5 //
 /////////////////////////////////////////////////////////// 
+extern void acc_memcpy_to_device_async(d_void* dest, h_void* src, size_t bytes, int async, int threadID);
+extern void acc_memcpy_from_device_async(h_void* dest, d_void* src, size_t bytes, int async, int threadID);
 extern void acc_memcpy_device(d_void* dest, d_void* src, size_t bytes, int threadID);
 extern void acc_memcpy_device_async(d_void* dest, d_void* src, size_t bytes, int async, int threadID);
 

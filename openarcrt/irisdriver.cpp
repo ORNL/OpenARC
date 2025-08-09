@@ -44,11 +44,12 @@ std::vector<int> IrisDriver::PhiDeviceIDs;
 std::vector<int> IrisDriver::DefaultDeviceIDs;
 int IrisDriver::openarcrt_iris_policy;
 int IrisDriver::openarcrt_iris_dmem;
+int IrisDriver::openarcrt_forced_sync;
 
 int IrisDriver::HI_getIrisDeviceID(acc_device_t devType, acc_device_t userInput, int devnum, int memTrOnly) {
 #ifdef _OPENARC_PROFILE_
     if( HI_openarcrt_verbosity > 2 ) {
-        fprintf(stderr, "[OPENARCRT-INFO]\t\tenter IrisDriver::HI_getIrisDeviceID(%s, %d)\n", HI_get_device_type_string(devType), devnum);
+        fprintf(stderr, "[OPENARCRT-INFO]\t\tenter IrisDriver::HI_getIrisDeviceID(%s, %d, %d)\n", HI_get_device_type_string(devType), devnum, memTrOnly);
     }    
 #endif
 	int irisDeviceType = iris_default;
@@ -56,7 +57,7 @@ int IrisDriver::HI_getIrisDeviceID(acc_device_t devType, acc_device_t userInput,
 	if( openarcrt_iris_policy != 0 ) {
 #ifdef _OPENARC_PROFILE_
     	if( HI_openarcrt_verbosity > 2 ) {
-        	fprintf(stderr, "[OPENARCRT-INFO]\t\texit IrisDriver::HI_getIrisDeviceID(%s, %d)\n", HI_get_device_type_string(devType), devnum);
+        	fprintf(stderr, "[OPENARCRT-INFO]\t\texit IrisDriver::HI_getIrisDeviceID(%s, %d, %d)\n", HI_get_device_type_string(devType), devnum, memTrOnly);
     	}    
 #endif
 		if( memTrOnly == 2 ) {
@@ -145,7 +146,7 @@ int IrisDriver::HI_getIrisDeviceID(acc_device_t devType, acc_device_t userInput,
 	}
 #ifdef _OPENARC_PROFILE_
     if( HI_openarcrt_verbosity > 2 ) {
-        fprintf(stderr, "[OPENARCRT-INFO]\t\texit IrisDriver::HI_getIrisDeviceID(%s, %d)\n", HI_get_device_type_string(devType), devnum);
+        fprintf(stderr, "[OPENARCRT-INFO]\t\texit IrisDriver::HI_getIrisDeviceID(%s, %d, %d)\n", HI_get_device_type_string(devType), devnum, memTrOnly);
     }    
 #endif
 	return irisDeviceID;
@@ -609,11 +610,13 @@ HI_error_t IrisDriver::HI_synchronize( int forcedSync, int threadID ) {
     }
 #endif
   int err = IRIS_SUCCESS;
+  int nestingLevel = threadTaskMapNesting[threadID];
   if( (forcedSync != 0) || (unifiedMemSupported == 1) ) { 
+    openarcrt_forced_sync = 1;
   	HostConf_t * tconf = getHostConf(threadID);
   	threadtaskmapiris_t *asyncTaskMap = threadAsyncTaskMap[threadID];
 	int default_async = DEFAULT_QUEUE+tconf->asyncID_offset;
-	if( asyncTaskMap->count(default_async) > 0 ) {
+	if( (nestingLevel == 0) && (asyncTaskMap->count(default_async) > 0) ) {
 #ifdef _OPENARC_PROFILE_
     	if( HI_openarcrt_verbosity > 2 ) {
         	fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_synchronize(thread ID = %d) waits for an IRIS task on async ID = %d\n", threadID, default_async);
@@ -639,10 +642,8 @@ HI_error_t IrisDriver::destroy(int threadID) {
     if( HI_openarcrt_verbosity > 2 ) {
         fprintf(stderr, "[OPENARCRT-INFO]\t\tenter IrisDriver::destroy()\n");
     }
-  	if( HI_openarcrt_verbosity > 4 ) {
-  		//fprintf(stderr, "[%s:%d][%s]\n", __FILE__, __LINE__, __func__);
-	}
 #endif
+#if 0
 	NVIDIADeviceIDs.clear();
 	AMDDeviceIDs.clear();
 	GPUDeviceIDs.clear();
@@ -652,9 +653,12 @@ HI_error_t IrisDriver::destroy(int threadID) {
 	DefaultDeviceIDs.clear();
 	openarcrt_iris_policy = 0;
 	openarcrt_iris_dmem = 1;
+	openarcrt_forced_sync = 0;
 #ifdef PRINT_TODO
 	fprintf(stderr, "[%s:%d][%s] Not Implemented!\n", __FILE__, __LINE__, __func__);
 #endif
+#endif
+	iris_finalize();
 
 #ifdef _OPENARC_PROFILE_
     if( HI_openarcrt_verbosity > 2 ) {
@@ -942,7 +946,77 @@ HI_error_t IrisDriver::HI_memcpy(void *dst, const void *src, size_t count, HI_Me
       }
       break;
     }
-    case HI_MemcpyDeviceToDevice:   fprintf(stderr, "[%s:%d][%s] not support D2D\n", __FILE__, __LINE__, __func__); break;
+    case HI_MemcpyDeviceToDevice:   
+    {
+		HI_device_mem_handle_t tHandleSRC, tHandleDST;
+		if( (HI_get_device_mem_handle(src, &tHandleSRC, tconf->threadID) == HI_success) && (HI_get_device_mem_handle(dst, &tHandleDST, tconf->threadID) == HI_success) ) {
+  			threadtaskmapiris_t *asyncTaskMap = threadAsyncTaskMap[threadID];
+			int default_async = DEFAULT_QUEUE+tconf->asyncID_offset;
+  			int currentAsync = threadAsyncMap[threadID];
+  			iris_task task;
+            bool task_exist = false;
+            if( threadTaskMap.count(threadID) > 0 ) {
+  			    task = threadTaskMap[threadID];
+                task_exist = true;
+            }
+  			int nestingLevel = threadTaskMapNesting[threadID];
+  			int nestingLevelGR = threadGraphMapNesting[threadID];
+  			if( !task_exist && (nestingLevel == 0) ) {
+        		iris_task_create(&task);
+			}
+            if( openarcrt_iris_dmem == 1 ) {
+              iris_mem tMemHandleSRC = tHandleSRC.memHandle;
+              iris_mem tMemHandleDST = tHandleDST.memHandle;
+              if( iris_mem_get_type(tMemHandleSRC) == iris::rt::IRIS_DMEM ) {
+        	    iris_task_dmem2dmem(task, tMemHandleSRC, tMemHandleDST);
+              } else {
+				fprintf(stderr, "[%s:%d][%s] not support D2D\n", __FILE__, __LINE__, __func__); break;
+              }
+            } else {
+			  fprintf(stderr, "[%s:%d][%s] not support D2D\n", __FILE__, __LINE__, __func__); break;
+            }
+  			if( nestingLevel == 0 ) {
+#if IRIS_TASK_SUBMIT_MODE == 0
+	
+				err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, true);
+				if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
+        		iris_task_release(task);
+#else
+				if( asyncTaskMap->count(default_async) > 0 ) {
+#ifdef _OPENARC_PROFILE_
+					tconf->BTaskCnt++;	
+    				if( HI_openarcrt_verbosity > 2 ) {
+        				fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_memcpy(%lu, thread ID = %d) submits an IRIS task with dependency to the device %d\n", count, threadID, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var));
+    				}
+#endif
+					iris_task dependTaskList[1] = { asyncTaskMap->at(default_async) };
+					iris_task_depend(task, 1, dependTaskList);
+		 
+					err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, true);
+					if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
+					iris_task_release(dependTaskList[0]);
+					asyncTaskMap->erase(default_async);
+				} else {
+#ifdef _OPENARC_PROFILE_
+					tconf->BTaskCnt++;	
+    				if( HI_openarcrt_verbosity > 2 ) {
+        				fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_memcpy(%lu, thread ID = %d) submits an IRIS task without dependency to the device %d\n", count, threadID, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var));
+    				}
+#endif				
+		 
+					err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, true);
+					if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
+				}
+        		iris_task_release(task);
+#endif
+			} else {
+  				threadAsyncMap[threadID] = default_async;
+			}
+      } else {
+		//[DEBUG] How to handle the error case?
+      }
+      break;
+    }
   }
   if (err != IRIS_SUCCESS) fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err);
 #ifdef _OPENARC_PROFILE_
@@ -1229,7 +1303,73 @@ HI_error_t IrisDriver::HI_memcpy_async(void *dst, const void *src, size_t count,
       }
       break;
     }
-    case HI_MemcpyDeviceToDevice:   fprintf(stderr, "[%s:%d][%s] not support D2D\n", __FILE__, __LINE__, __func__); break;
+    case HI_MemcpyDeviceToDevice:   
+    {
+		HI_device_mem_handle_t tHandleSRC, tHandleDST;
+		if( (HI_get_device_mem_handle(src, &tHandleSRC, tconf->threadID) == HI_success) && (HI_get_device_mem_handle(dst, &tHandleDST, tconf->threadID) == HI_success) ) {
+  			iris_task task;
+            bool task_exist = false;
+            if( threadTaskMap.count(threadID) > 0 ) {
+  			    task = threadTaskMap[threadID];
+                task_exist = true;
+            }
+  			int nestingLevel = threadTaskMapNesting[threadID];
+  			int nestingLevelGR = threadGraphMapNesting[threadID];
+  			if( !task_exist && (nestingLevel == 0) ) {
+        		iris_task_create(&task);
+			}
+			if( openarcrt_iris_dmem == 1 ) {
+            	iris_mem tMemHandleSRC = tHandleSRC.memHandle;
+            	iris_mem tMemHandleDST = tHandleDST.memHandle;
+            	if( iris_mem_get_type(tMemHandleSRC) == iris::rt::IRIS_DMEM ) {
+        	    	iris_task_dmem2dmem(task, tMemHandleSRC, tMemHandleDST);
+            	} else {
+					fprintf(stderr, "[%s:%d][%s] not support D2D\n", __FILE__, __LINE__, __func__); break;
+            	}
+			} else {
+				fprintf(stderr, "[%s:%d][%s] not support D2D\n", __FILE__, __LINE__, __func__); break;
+			}
+  			if( nestingLevel == 0 ) {
+				if( asyncTaskMap->count(async) > 0 ) {
+#ifdef _OPENARC_PROFILE_
+					tconf->BTaskCnt++;	
+    				if( HI_openarcrt_verbosity > 2 ) {
+        				fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_memcpy_async(%lu, async ID = %d, thread ID = %d) submits an IRIS task asynchrnously with dependency to the device %d\n", count, async, threadID, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var));
+    				}
+#endif
+					dependTaskList[nTasks++] = asyncTaskMap->at(async);
+					iris_task_depend(task, nTasks, dependTaskList); 
+					err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, false);
+					if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
+					iris_task_release(asyncTaskMap->at(async));
+					delete[] dependTaskList;
+				} else {
+#ifdef _OPENARC_PROFILE_
+					tconf->BTaskCnt++;	
+    				if( HI_openarcrt_verbosity > 2 ) {
+        				fprintf(stderr, "[OPENARCRT-INFO]\t\tIrisDriver::HI_memcpy_async(%lu, async ID = %d, thread ID = %d) submits an IRIS task asynchrnously without dependency to the device %d\n", count, async, threadID, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var));
+    				}
+#endif
+					if( nTasks > 0 ) {
+						iris_task_depend(task, nTasks, dependTaskList); 
+					}
+					err = iris_task_submit(task, HI_getIrisDeviceID(tconf->acc_device_type_var,tconf->user_set_device_type_var, tconf->acc_device_num_var), NULL, false);
+					if (err != IRIS_SUCCESS) { fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err); exit(1); }
+					delete[] dependTaskList;
+				}
+				(*asyncTaskMap)[async] = task;
+			} else {
+  				if( (currentAsync == NO_QUEUE) && (nTasks > 0) ) {
+  					iris_task_depend(task, nTasks, dependTaskList); 
+  				}
+  				delete[] dependTaskList;
+  				threadAsyncMap[threadID] = async;
+			}
+      } else {
+		//[DEBUG] How to handle the error case?
+      }
+      break;
+    }
   }
   if (err != IRIS_SUCCESS) fprintf(stderr, "[%s:%d][%s] error[%d]\n", __FILE__, __LINE__, __func__, err);
 #ifdef _OPENARC_PROFILE_
@@ -1810,6 +1950,7 @@ int IrisDriver::HI_get_num_devices_init(acc_device_t devType, int threadID) {
   } else {
     openarcrt_iris_dmem = atoi(envVar);
   }
+  openarcrt_forced_sync = 0;
 #ifdef _OPENARC_PROFILE_
     if( HI_openarcrt_verbosity >= 0 ) {
         fprintf(stderr, "[OPENARCRT-INFO]\t\tIRIS DMEM: %d\n", openarcrt_iris_dmem);
@@ -3006,6 +3147,11 @@ void IrisDriver::HI_exit_subregion(const char *label, int mode, int threadID) {
 				if( nestingLevelGR == 0 ) {
   					HostConf_t *tconf = getHostConf(threadID);
 					if( currentAsync == DEFAULT_QUEUE+tconf->asyncID_offset ) {
+						//[DEBUG on June 18, 2025] change memcpy_cmd_option from 2 to 0
+						//to avoid deadlock for synchronous IRIS task submission.
+						if( memcpy_cmd_option == 2 ) {
+							memcpy_cmd_option = 0;
+						}
 #if IRIS_TASK_SUBMIT_MODE == 0
 #ifdef _OPENARC_PROFILE_
     					if( HI_openarcrt_verbosity > 2 ) {
@@ -3030,7 +3176,7 @@ void IrisDriver::HI_exit_subregion(const char *label, int mode, int threadID) {
 #else
 						//[DEBUG on Sept. 22, 2024] When IRIS DMEM is used, H2D transfers are implicitly handled
 						//and thus, H2D commands are not included in the IRIS task.
-						if((openarcrt_iris_dmem == 1) || (iris_task_kernel_cmd_only(task) != IRIS_SUCCESS)) {
+						if((openarcrt_iris_dmem == 1) || (iris_task_kernel_cmd_only(task) != IRIS_SUCCESS) || (openarcrt_forced_sync == 1)) {
 							if( asyncTaskMap->count(currentAsync) > 0 ) {
 #ifdef _OPENARC_PROFILE_
     							if( HI_openarcrt_verbosity > 2 ) {

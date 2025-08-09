@@ -22,7 +22,7 @@ fi
 if [ "$mode" = "all" ] || [ "$mode" = "util" ]; then
 	if [ "$OPENARC_ARCH" != "5" ]; then
 		if [ "$OPENARC_ARCH" = "6" ]; then
-			make binUtilCUDA PRINT_LOG=1
+			which nvcc &> /dev/null && make binUtilCUDA PRINT_LOG=1
 		else
 			make binUtil PRINT_LOG=1
 		fi

@@ -1440,6 +1440,29 @@ void acc_memcpy_to_device(d_void* dest, h_void* src, size_t bytes) {
 	acc_memcpy_to_device(dest, src, bytes, NO_THREAD_ID);
 }
 
+void acc_memcpy_to_device_async(d_void* dest, h_void* src, size_t bytes, int async, int threadID) {
+#ifdef _OPENARC_PROFILE_
+	if( HI_openarcrt_verbosity > 0 ) {
+		fprintf(stderr, "[OPENARCRT-INFO] enter acc_memcpy_to_device_async(async ID = %d, thread ID = %d)\n", async, threadID);
+	}
+#endif
+    //HostConf *tconf = getHostConf(threadID);
+    if( threadID == NO_THREAD_ID ) {
+        threadID = get_thread_id();
+    }   
+	HI_set_async(async, threadID);
+	HI_memcpy_async(dest, (const void*)src, bytes, HI_MemcpyHostToDevice, 0, async, 0, NULL, threadID);
+#ifdef _OPENARC_PROFILE_
+	if( HI_openarcrt_verbosity > 0 ) {
+		fprintf(stderr, "[OPENARCRT-INFO] exit acc_memcpy_to_device_async(async ID %d, thread ID = %d)\n", async, threadID);
+	}
+#endif
+}
+
+void acc_memcpy_to_device_async(d_void* dest, h_void* src, size_t bytes, int async) {
+	acc_memcpy_to_device_async(dest, src, bytes, async, NO_THREAD_ID);
+}
+
 void acc_memcpy_from_device(h_void* dest, d_void* src, size_t bytes, int threadID) {
 #ifdef _OPENARC_PROFILE_
 	if( HI_openarcrt_verbosity > 0 ) {
@@ -1460,6 +1483,74 @@ void acc_memcpy_from_device(h_void* dest, d_void* src, size_t bytes, int threadI
 
 void acc_memcpy_from_device(h_void* dest, d_void* src, size_t bytes) {
 	acc_memcpy_from_device(dest, src, bytes, NO_THREAD_ID);
+}
+
+void acc_memcpy_from_device_async(h_void* dest, d_void* src, size_t bytes, int async, int threadID) {
+#ifdef _OPENARC_PROFILE_
+	if( HI_openarcrt_verbosity > 0 ) {
+		fprintf(stderr, "[OPENARCRT-INFO] enter acc_memcpy_from_device_async(async ID = %d, thread ID = %d)\n",async, threadID);
+	}
+#endif
+    //HostConf *tconf = getHostConf(threadID);
+    if( threadID == NO_THREAD_ID ) {
+        threadID = get_thread_id();
+    }   
+	HI_set_async(async, threadID);
+	HI_memcpy_async(dest, (const void*)src, bytes, HI_MemcpyDeviceToHost, 0, async, 0, NULL, threadID);
+#ifdef _OPENARC_PROFILE_
+	if( HI_openarcrt_verbosity > 0 ) {
+		fprintf(stderr, "[OPENARCRT-INFO] exit acc_memcpy_from_device_async(async ID = %d, thread ID = %d)\n",async, threadID);
+	}
+#endif
+}
+
+void acc_memcpy_from_device_async(h_void* dest, d_void* src, size_t bytes, int async) {
+	acc_memcpy_from_device_async(dest, src, bytes, async, NO_THREAD_ID);
+}
+
+void acc_memcpy_device(d_void* dest, d_void* src, size_t bytes, int threadID) {
+#ifdef _OPENARC_PROFILE_
+	if( HI_openarcrt_verbosity > 0 ) {
+		fprintf(stderr, "[OPENARCRT-INFO] enter acc_memcpy_device(thread ID = %d)\n", threadID);
+	}
+#endif
+    //HostConf *tconf = getHostConf(threadID);
+    if( threadID == NO_THREAD_ID ) {
+        threadID = get_thread_id();
+    }   
+	HI_memcpy(dest, (const void*)src, bytes, HI_MemcpyDeviceToDevice, 0, threadID);
+#ifdef _OPENARC_PROFILE_
+	if( HI_openarcrt_verbosity > 0 ) {
+		fprintf(stderr, "[OPENARCRT-INFO] exit acc_memcpy_device(thread ID = %d)\n", threadID);
+	}
+#endif
+}
+
+void acc_memcpy_device(d_void* dest, d_void* src, size_t bytes) {
+	acc_memcpy_device(dest, src, bytes, NO_THREAD_ID);
+}
+
+void acc_memcpy_device_async(d_void* dest, d_void* src, size_t bytes, int async, int threadID) {
+#ifdef _OPENARC_PROFILE_
+	if( HI_openarcrt_verbosity > 0 ) {
+		fprintf(stderr, "[OPENARCRT-INFO] enter acc_memcpy_device_async(async ID = %d, thread ID = %d)\n",async, threadID);
+	}
+#endif
+    //HostConf *tconf = getHostConf(threadID);
+    if( threadID == NO_THREAD_ID ) {
+        threadID = get_thread_id();
+    }   
+	HI_set_async(async, threadID);
+	HI_memcpy_async(dest, (const void*)src, bytes, HI_MemcpyDeviceToDevice, 0, async, 0, NULL, threadID);
+#ifdef _OPENARC_PROFILE_
+	if( HI_openarcrt_verbosity > 0 ) {
+		fprintf(stderr, "[OPENARCRT-INFO] exit acc_memcpy_device_async(async ID = %d, thread ID = %d)\n",async, threadID);
+	}
+#endif
+}
+
+void acc_memcpy_device_async(d_void* dest, d_void* src, size_t bytes, int async) {
+	acc_memcpy_device_async(dest, src, bytes, async, NO_THREAD_ID);
 }
 
 //////////////////////////////////////////////////////////////////////

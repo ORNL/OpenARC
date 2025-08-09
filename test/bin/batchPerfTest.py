@@ -5,6 +5,7 @@ import shlex
 
 #Set the number of executions for each benchmark.
 NUM_REPEATS=1
+TESTBENCH="ALL" #If set to a specific bench, only that benchmark will be executed.
 
 OPENARC=os.getenv('openarc')
 #print("openarc env = %s" % (OPENARC))
@@ -64,6 +65,12 @@ dPROCESS=subprocess.Popen("date", stdout=subprocess.PIPE, stderr=subprocess.PIPE
 stdout, stderr = dPROCESS.communicate()
 tDATE = "==> Test starts: " + stdout
 eFILE1.write(tDATE)
+OPENARC_ARCH=os.getenv('OPENARC_ARCH')
+oFILE.write("==> OPENARC_ARCH:"+OPENARC_ARCH+"\n")
+oFILE.flush()
+OPENARCRT_IRIS_DMEM=os.getenv('OPENARCRT_IRIS_DMEM')
+oFILE.write("==> OPENARCRT_IRIS_DMEM:"+OPENARCRT_IRIS_DMEM+"\n")
+oFILE.flush()
 
 PROG_NAMES=[]
 PROG_TIMES=[]
@@ -75,6 +82,9 @@ for TEST in TEST_TARGETS:
 	PROGNAME=TEST[0]
 	if PROGNAME in SKIP_TESTS:
 		continue
+	if TESTBENCH != "ALL":
+		if PROGNAME != TESTBENCH:
+			continue
 	PROGPATH=OPENARC+TEST[1]
 	BUILDCMD=TEST[2]
 	MAKECMD=TEST[3]

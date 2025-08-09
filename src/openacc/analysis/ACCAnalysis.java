@@ -951,7 +951,10 @@ public class ACCAnalysis extends AnalysisPass
 											AnalysisTools.getEnclosingAnnotationContext(annot));
 								}
 							}
-							if( elmType.equals("symbol") ) {
+							if( elmType.equals("subarray") && ACCAnnotation.internalDataClauses.contains(key) ) {
+								Set<Symbol> new_set = AnalysisTools.subarraysToSymbols(vSet, true);
+								annot.put(key,  new_set);
+							} else if( elmType.equals("symbol") ) {
 								Set<Symbol> new_set = new HashSet<Symbol>();
 								updateSymbols(inputTR, (Set<Symbol>)vSet, new_set, nameChangeMap);
 								annot.put(key, new_set); //update symbol set in the annotation

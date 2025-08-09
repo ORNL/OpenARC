@@ -309,6 +309,7 @@ public:
 	static int openarcrt_iris_policy;
 #endif
 	static int openarcrt_iris_dmem;
+	static int openarcrt_forced_sync;
 
 	//thread to IRIS task mapping table.
 	threadasyncmapiris_t threadAsyncMap;

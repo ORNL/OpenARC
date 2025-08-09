@@ -4555,11 +4555,15 @@ public abstract class CUDATranslationTools {
 							if( !symspecs.contains(CUDASpecifier.CUDA_SHARED) ) {
 								symspecs.add(CUDASpecifier.CUDA_SHARED);
 							}
+							//[DEBUG on July 10, 2025] Remove const qualifier if existing.
+							symspecs.remove(Specifier.CONST);
 						} else {
 							List<Specifier> specs = vaDecl.getSpecifiers();
 							if( !specs.contains(CUDASpecifier.CUDA_SHARED) ) {
 								specs.add(0, CUDASpecifier.CUDA_SHARED);
 							}
+							//[DEBUG on July 10, 2025] Remove const qualifier if existing.
+							specs.remove(Specifier.CONST);
 						}
 						Declarator declr = vaDecl.getDeclarator(0);
 						Traversable parent = decl.getParent(); //parent should be DeclarationStatement.

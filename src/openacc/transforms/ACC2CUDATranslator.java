@@ -990,6 +990,7 @@ public class ACC2CUDATranslator extends ACC2GPUTranslator {
 		Set<Symbol> psharedROSet = new HashSet<Symbol>();
 		Set<Symbol> ROSymSet = new HashSet<Symbol>();
 		Set<Symbol> PROSymSet = new HashSet<Symbol>();
+		Set<Symbol> WOSymSet = new HashSet<Symbol>();
 		Set<Symbol> expSharedSymSet = new HashSet<Symbol>();
 		ARCAnnotation tCAnnot = at.getAnnotation(ARCAnnotation.class, "constant");
 		Set<SubArray> dataSet;
@@ -1049,6 +1050,11 @@ public class ACC2CUDATranslator extends ACC2GPUTranslator {
 		if( tACCAnnot != null ) {
 			PROSymSet.addAll((Set<Symbol>)tACCAnnot.get("accpreadonly"));
 		}
+		tACCAnnot = at.getAnnotation(ACCAnnotation.class, "accwriteonly");
+		if( tACCAnnot != null ) {
+			WOSymSet.addAll((Set<Symbol>)tACCAnnot.get("accwriteonly"));
+		}
+		tACCAnnot = at.getAnnotation(ACCAnnotation.class, "accpreadonly");
 		tACCAnnot = at.getAnnotation(ACCAnnotation.class, "accexplicitshared");
 		if( tACCAnnot != null ) {
 			expSharedSymSet.addAll((Set<Symbol>)tACCAnnot.get("accexplicitshared"));
@@ -4690,6 +4696,7 @@ public class ACC2CUDATranslator extends ACC2GPUTranslator {
 		Set<Symbol> textureSet = new HashSet<Symbol>();
 		Set<Symbol> sharedROSet = new HashSet<Symbol>();
 		Set<Symbol> ROSymSet = new HashSet<Symbol>();
+		Set<Symbol> WOSymSet = new HashSet<Symbol>();
 		ARCAnnotation tCAnnot = at.getAnnotation(ARCAnnotation.class, "constant");
 		Set<SubArray> dataSet;
 		if( tCAnnot != null ) {
@@ -4733,6 +4740,10 @@ public class ACC2CUDATranslator extends ACC2GPUTranslator {
 		ACCAnnotation ROAnnot = at.getAnnotation(ACCAnnotation.class, "accreadonly");
 		if( ROAnnot != null ) {
 			ROSymSet.addAll((Set<Symbol>)ROAnnot.get("accreadonly"));
+		}
+		ACCAnnotation WOAnnot = at.getAnnotation(ACCAnnotation.class, "accwriteonly");
+		if( WOAnnot != null ) {
+			WOSymSet.addAll((Set<Symbol>)ROAnnot.get("accwriteonly"));
 		}
 		//Check if condition
 		Expression ifCond = null;
@@ -5076,6 +5087,7 @@ public class ACC2CUDATranslator extends ACC2GPUTranslator {
 		//////////////////////////////////////////////////////////////////
 		HashSet<Symbol> accsharedSet = new HashSet<Symbol>();
 		HashSet<Symbol> accreadonlySet = new HashSet<Symbol>();
+		HashSet<Symbol> accwriteonlySet = new HashSet<Symbol>();
 		//HashSet<Symbol> accprivateSet = new HashSet<Symbol>();
 		//HashSet<Symbol> rcreateSet = new HashSet<Symbol>();
 		HashSet<Symbol> accreductionSet = new HashSet<Symbol>();
@@ -5132,6 +5144,10 @@ public class ACC2CUDATranslator extends ACC2GPUTranslator {
 				symSet = (Set<Symbol>)cannot.get("accreadonly");
 				if( symSet != null ) {
 					accreadonlySet.addAll(symSet);
+				}
+				symSet = (Set<Symbol>)cannot.get("accwriteonly");
+				if( symSet != null ) {
+					accwriteonlySet.addAll(symSet);
 				}
 /*
 				symSet = (Set<Symbol>)cannot.get("accprivate");
@@ -6224,6 +6240,8 @@ public class ACC2CUDATranslator extends ACC2GPUTranslator {
 			//[DEBUG on May 16, 2021] added to support Brisbane backend.
         	if(accreadonlySet.contains(sharedSym)) {
         		call_to_new_proc.addArgTrait(trait_readonly);
+        	} else if(accwriteonlySet.contains(sharedSym)) {
+        		call_to_new_proc.addArgTrait(trait_writeonly);
         	} else {
         		call_to_new_proc.addArgTrait(trait_readwrite);
         	}

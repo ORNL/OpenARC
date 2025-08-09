@@ -214,9 +214,9 @@ int main() {
 
 	colind = (int *)malloc(sizeof(int)*NZR);	
 	rowptr = (int *)malloc(sizeof(int)*(ASIZE+1));	
-	values = (float *)malloc(sizeof(int)*NZR);	
-	x = (float *)malloc(sizeof(int)*ASIZE);	
-	y = (float *)malloc(sizeof(int)*ASIZE);	
+	values = (float *)malloc(sizeof(float)*NZR);	
+	x = (float *)malloc(sizeof(float)*ASIZE);	
+	y = (float *)malloc(sizeof(float)*ASIZE);	
   printf("**** SerialSpmul starts! ****\n");
 
 #if defined(_OPENMP)
@@ -346,7 +346,7 @@ LB99:
 			float tmp = y[i];
 			x[i] = tmp;
 			if( tmp != 0.0f ) {
-				exp0 = (int)(log10f(fabsf(tmp)));
+				int exp0 = (int)(log10f(fabsf(tmp)));
 				if( exp0 >= 0 ) {
 					for( j=1; j<=(1+exp0); j++ ) {
 						x[i] = x[i]/10.0f;

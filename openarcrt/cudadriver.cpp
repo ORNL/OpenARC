@@ -16,6 +16,9 @@
 #include <sys/syscall.h>
 #endif
 
+//Use CUDA Runtime API for D2D transfers instead of Driver API.
+//#define USE_CUDA_RUNTIME_API
+
 //[DEBUG] commented out since they are no more static.
 //std::map<std::string, CUfunction> CudaDriver::kernelMap;
 //std::set<std::string> CudaDriver::kernelNameSet;
@@ -541,7 +544,6 @@ int CudaDriver::HI_get_num_devices(acc_device_t devType, int threadID) {
 		fprintf(stderr, "[OPENARCRT-INFO]\t\tenter CudaDriver::HI_get_num_devices()\n");
 	}
 #endif
-    //cudaGetDeviceCount(&numDevices);
     cuInit(0);
 	if( (devType == acc_device_gpu) || (devType == acc_device_nvidia) ) {
     	cuDeviceGetCount(&numDevices);
@@ -563,11 +565,13 @@ HI_error_t CudaDriver::destroy(int threadID) {
 		fprintf(stderr, "[OPENARCRT-INFO]\t\tenter CudaDriver::destroy()\n");
 	}
 #endif
+#if 0
     CUresult err = cuCtxDestroy(cuContext);
     if(err != CUDA_SUCCESS) {
         fprintf(stderr, "[ERROR in CudaDriver::destroy()] failed to destroy CUDA context with error %d (%s)\n", err, cuda_error_code(err));
         return HI_error;
     }
+#endif
 #ifdef _OPENARC_PROFILE_
 	if( HI_openarcrt_verbosity > 2 ) {
 		fprintf(stderr, "[OPENARCRT-INFO]\t\texit CudaDriver::destroy()\n");
@@ -1715,7 +1719,6 @@ void CudaDriver::HI_tempFree( void* tempPtr, acc_device_t devType, int threadID)
     || devType == acc_device_radeon || devType == acc_device_current ) {
         if( tempPtr != 0 ) {
 			tempMallocSet.erase(tempPtr);	
-            //cudaFree(tempPtr);
     		CUresult cuResult = cuMemFree((CUdeviceptr)tempPtr);
     		if(cuResult != CUDA_SUCCESS) {
         		fprintf(stderr, "[ERROR in CudaDriver::HI_tempFree()] failed to free on CUDA with error %d (%s)\n", cuResult, cuda_error_code(cuResult));
@@ -2134,7 +2137,17 @@ HI_error_t  CudaDriver::HI_memcpy(void *dst, const void *src, size_t count, HI_M
         	break;
     	}
     	case HI_MemcpyDeviceToDevice: {
+			//[DEBUG] Both cuMemcpyDtoD() and cudaMemcpy() allow partial data.
+#ifdef USE_CUDA_RUNTIME_API
+			cudaError_t cudaResult = cudaMemcpy((void *)dst, (const void *)src, count, cudaMemcpyDeviceToDevice);
+			if( cudaResult == cudaSuccess ) {
+				cuResult = CUDA_SUCCESS;	
+			} else {
+				cuResult = CUDA_ERROR_INVALID_VALUE;
+			}
+#else
         	cuResult = cuMemcpyDtoD((CUdeviceptr) dst, (CUdeviceptr)src, count);
+#endif
         	break;
     	}
     	}
@@ -2211,8 +2224,18 @@ HI_error_t  CudaDriver::HI_memcpy_unified(void *dst, const void *src, size_t cou
         	break;
     	}
     	case HI_MemcpyDeviceToDevice: {
+			//[DEBUG] Both cuMemcpyDtoD() and cudaMemcpy() allow partial data.
+#ifdef USE_CUDA_RUNTIME_API
+			cudaError_t cudaResult = cudaMemcpy((void *)dst, (const void *)src, count, cudaMemcpyDeviceToDevice);
+			if( cudaResult == cudaSuccess ) {
+				cuResult = CUDA_SUCCESS;	
+			} else {
+				cuResult = CUDA_ERROR_INVALID_VALUE;
+			}
+#else
         	//cuResult = cuMemcpyDtoD((CUdeviceptr) dst, (CUdeviceptr)src, count);
         	cuResult = cuMemcpy((CUdeviceptr) dst, (CUdeviceptr) src, count);
+#endif
         	break;
     	}
     	}
@@ -2474,7 +2497,17 @@ HI_error_t CudaDriver::HI_memcpy_async(void *dst, const void *src, size_t count,
         	break;
     	}
     	case HI_MemcpyDeviceToDevice: {
+			//[DEBUG] Both cuMemcpyDtoDAsync() and cudaMemcpyAsync() allow partial data.
+#ifdef USE_CUDA_RUNTIME_API
+			cudaError_t cudaResult = cudaMemcpyAsync((void *)dst, (const void *)src, count, cudaMemcpyDeviceToDevice, stream);
+			if( cudaResult == cudaSuccess ) {
+				cuResult = CUDA_SUCCESS;	
+			} else {
+				cuResult = CUDA_ERROR_INVALID_VALUE;
+			}
+#else
         	cuResult = cuMemcpyDtoDAsync((CUdeviceptr) dst, (CUdeviceptr)src, count, stream);
+#endif
         	break;
     	}
     	}
@@ -2587,7 +2620,17 @@ HI_error_t CudaDriver::HI_memcpy_asyncS(void *dst, const void *src, size_t count
         break;
     }
     case HI_MemcpyDeviceToDevice: {
+		//[DEBUG] Both cuMemcpyDtoDAsync() and cudaMemcpyAsync() allow partial data.
+#ifdef USE_CUDA_RUNTIME_API
+		cudaError_t cudaResult = cudaMemcpyAsync((void *)dst, (const void *)src, count, cudaMemcpyDeviceToDevice, stream);
+		if( cudaResult == cudaSuccess ) {
+			cuResult = CUDA_SUCCESS;	
+		} else {
+			cuResult = CUDA_ERROR_INVALID_VALUE;
+		}
+#else
         cuResult = cuMemcpyDtoDAsync((CUdeviceptr) dst, (CUdeviceptr)src, count, stream);
+#endif
         break;
     }
     }
